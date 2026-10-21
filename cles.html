@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maison : générer les clés</title>
+<style>
+:root{--bg:#EEF2F0;--surface:#fff;--ink:#1B2A2E;--muted:#5B6B6D;--line:#D6DFDC;--accent:#1F6F6A}
+@media (prefers-color-scheme: dark){:root{--bg:#12191A;--surface:#1B2425;--ink:#E4EDEB;--muted:#93A4A5;--line:#2A3637;--accent:#58B9AF}}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,sans-serif}
+main{max-width:620px;margin:0 auto;padding:24px 16px 60px}
+h1{font-size:26px;margin:0 0 6px}
+p{color:var(--muted)}
+.btn{display:block;width:100%;min-height:52px;border:0;border-radius:16px;background:var(--accent);color:#fff;font:inherit;font-weight:700;margin:18px 0}
+.k{background:var(--surface);border-radius:16px;padding:14px;margin:12px 0}
+.k b{display:block;margin-bottom:6px}
+.k small{display:block;color:var(--muted);margin-bottom:8px}
+textarea{width:100%;box-sizing:border-box;border:1.5px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font:13px/1.4 ui-monospace,monospace;padding:10px;resize:vertical}
+.copy{margin-top:8px;border:0;border-radius:999px;padding:8px 14px;font:inherit;font-weight:600;background:var(--line);color:var(--ink)}
+#out{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1>Clés des notifications</h1>
+<p>À faire une seule fois. Les clés sont créées dans ton navigateur et ne sont envoyées nulle part. Copie-les au fur et à mesure : si tu recharges la page, elles seront différentes.</p>
+<button class="btn" id="gen">Générer les clés</button>
+<div id="out">
+  <div class="k"><b>FAMILY_KEY</b><small>Dans le Worker (secret) et dans config.js (pushKey)</small><textarea id="fam" rows="2" readonly></textarea><button class="copy" data-c="fam">Copier</button></div>
+  <div class="k"><b>VAPID_PUBLIC</b><small>Dans le Worker (texte) et dans config.js (vapidPublic)</small><textarea id="pub" rows="3" readonly></textarea><button class="copy" data-c="pub">Copier</button></div>
+  <div class="k"><b>VAPID_PRIVATE_JWK</b><small>Seulement dans le Worker (secret). Ne la mets jamais dans config.js.</small><textarea id="priv" rows="4" readonly></textarea><button class="copy" data-c="priv">Copier</button></div>
+  <div class="k"><b>Bloc à coller dans config.js</b><small>Remplace ensuite l'adresse du Worker par la tienne.</small><textarea id="cfg" rows="4" readonly></textarea><button class="copy" data-c="cfg">Copier</button></div>
+</div>
+</main>
+<script>
+const b64u = b => btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+document.getElementById('gen').onclick = async () => {
+  const kp = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const jwk = await crypto.subtle.exportKey('jwk', kp.privateKey);
+  const pub = b64u(await crypto.subtle.exportKey('raw', kp.publicKey));
+  const fam = b64u(crypto.getRandomValues(new Uint8Array(24)));
+  document.getElementById('fam').value = fam;
+  document.getElementById('pub').value = pub;
+  document.getElementById('priv').value = JSON.stringify({ x: jwk.x, y: jwk.y, d: jwk.d });
+  document.getElementById('cfg').value = `  pushServer: "https://maison-push.TON-COMPTE.workers.dev",\n  pushKey: "${fam}",\n  vapidPublic: "${pub}"`;
+  document.getElementById('out').style.display = 'block';
+  document.getElementById('gen').textContent = 'Générer de nouvelles clés';
+};
+document.addEventListener('click', async e => {
+  const b = e.target.closest('.copy'); if (!b) return;
+  const t = document.getElementById(b.dataset.c);
+  try { await navigator.clipboard.writeText(t.value); } catch { t.select(); document.execCommand('copy'); }
+  b.textContent = 'Copié'; setTimeout(() => b.textContent = 'Copier', 1500);
+});
+</script>
+</body>
+</html>

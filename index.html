@@ -1,0 +1,860 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#EEF2F0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#12191A" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Maison">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<title>Maison</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EEF2F0; --surface:#FFFFFF; --ink:#1B2A2E; --muted:#5B6B6D; --line:#D6DFDC;
+  --accent:#1F6F6A; --accent-soft:#D3EAE6; --accent-ink:#FFFFFF;
+  --late:#B3261E; --shadow:0 1px 0 rgba(27,42,46,.06);
+  --display:'Bricolage Grotesque', 'Manrope', system-ui, sans-serif;
+  --body:'Manrope', system-ui, -apple-system, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#12191A; --surface:#1B2425; --ink:#E4EDEB; --muted:#93A4A5; --line:#2A3637;
+    --accent:#58B9AF; --accent-soft:#1E3735; --accent-ink:#0E1A19; --late:#F2867D;
+    --shadow:none; color-scheme: dark;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45;-webkit-tap-highlight-color:transparent;overscroll-behavior-y:none}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;-webkit-user-select:none;user-select:none}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+#app{max-width:560px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 150px)}
+
+/* En-tête */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 18px}
+.top h1{font-family:var(--display);font-weight:700;font-size:30px;line-height:1.05;margin:0;letter-spacing:-.015em}
+.top p{margin:3px 0 0;color:var(--muted);font-size:14px}
+.me{border:0;background:none;padding:0;border-radius:50%}
+
+/* Avatars */
+.av{--c:#888;width:30px;height:30px;flex:none;border-radius:50%;display:inline-grid;place-items:center;background:var(--c);font-size:16px;line-height:1;box-shadow:inset 0 0 0 2px rgba(255,255,255,.18)}
+.av.lg{width:42px;height:42px;font-size:22px}
+.av.sm{width:22px;height:22px;font-size:12px}
+
+/* Panneau d'état d'une pièce : l'élément fort de l'app */
+.slab{--c:var(--accent);border-radius:24px;padding:16px 18px 14px;background:var(--accent-soft);color:var(--ink);position:relative}
+.slab.busy{background:var(--c);color:#fff}
+.slab .room{display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:14px;opacity:.85}
+.slab .state{font-family:var(--display);font-weight:700;font-size:44px;line-height:1;letter-spacing:-.025em;margin:14px 0 4px}
+.slab .detail{font-size:15px;margin:0 0 14px;opacity:.92;min-height:1.45em}
+.slab .strip{background:rgba(27,42,46,.1)}
+.slab.busy .strip{background:rgba(255,255,255,.22)}
+.slab.busy .strip i{background:rgba(255,255,255,.92)!important}
+.slab.busy .strip b{background:#fff}
+.slab .ticks{opacity:.7}
+.slab .act{position:absolute;right:12px;top:10px}
+.mini{border:0;border-radius:999px;padding:7px 14px;font-weight:600;font-size:14px;background:var(--surface);color:var(--ink)}
+.slab.busy .mini{background:rgba(255,255,255,.95);color:#1B2A2E}
+.rooms{display:grid;gap:12px}
+.rooms .slab .state{font-size:36px;margin-top:10px}
+
+/* Frise horaire */
+.strip{position:relative;height:12px;border-radius:999px;background:var(--line);overflow:hidden}
+.strip i{position:absolute;top:0;bottom:0;border-radius:999px;min-width:4px}
+.strip b{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink);border-radius:2px}
+.ticks{display:flex;justify-content:space-between;font-size:11px;color:inherit;opacity:.6;margin-top:4px;font-variant-numeric:tabular-nums}
+
+/* Blocs */
+.block{background:var(--surface);border-radius:20px;padding:16px;margin-top:14px;box-shadow:var(--shadow)}
+.block h2{font-family:var(--display);font-weight:600;font-size:19px;margin:0 0 10px;letter-spacing:-.01em;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.block h2 a,.block h2 button{font-family:var(--body);font-size:14px;font-weight:600;color:var(--accent);text-decoration:none;background:none;border:0;padding:0}
+.muted{color:var(--muted)}
+.empty{color:var(--muted);margin:6px 0 2px;font-size:15px}
+ul.rows{list-style:none;margin:0;padding:0}
+.rows li{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line)}
+.rows li:first-child{border-top:0;padding-top:4px}
+.rows .grow{flex:1;min-width:0}
+.rows .t{font-weight:600;overflow-wrap:anywhere}
+.rows .m{font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;margin-top:1px}
+.rows .m .late{color:var(--late);font-weight:600}
+.time{font-variant-numeric:tabular-nums;font-weight:700}
+
+/* Boutons et puces */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:52px;border:0;border-radius:16px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:16px;padding:0 18px}
+.btn.ghost{background:transparent;color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.btn.danger{background:transparent;color:var(--late);box-shadow:inset 0 0 0 1.5px currentColor}
+.btn:disabled{opacity:.45}
+.btn + .btn{margin-top:10px}
+.link{background:none;border:0;padding:6px 0;color:var(--accent);font-weight:600;font-size:14px}
+.small{border:0;border-radius:999px;padding:7px 12px;font-weight:600;font-size:13px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+.small.neutral{background:var(--bg);color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:8px 14px;font-weight:600;font-size:14px;display:inline-flex;align-items:center;gap:6px}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.scroller{display:flex;gap:8px;overflow-x:auto;margin:16px -16px 0;padding:0 16px 4px;scrollbar-width:none}
+.scroller::-webkit-scrollbar{display:none}
+.scroller .chip{flex:none}
+.seg{display:flex;background:var(--surface);border-radius:14px;padding:4px;gap:4px;box-shadow:var(--shadow)}
+.seg button{flex:1;border:0;background:none;border-radius:10px;padding:9px 4px;font-weight:600;font-size:14px;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--ink)}
+.seg .n{font-variant-numeric:tabular-nums;opacity:.7;font-weight:500}
+
+/* Bouton d'action fixe au-dessus de la barre */
+.dock{position:fixed;left:0;right:0;bottom:calc(env(safe-area-inset-bottom) + 66px);padding:0 16px 10px;pointer-events:none;z-index:4}
+.dock .btn{max-width:528px;margin:0 auto;pointer-events:auto;box-shadow:0 6px 18px rgba(31,111,106,.28)}
+
+/* Barre d'onglets */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;background:var(--surface);border-top:1px solid var(--line);padding:6px 4px calc(env(safe-area-inset-bottom) + 6px)}
+nav.tabs .in{max-width:560px;margin:0 auto;display:flex}
+nav.tabs a{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:600;color:var(--muted);text-decoration:none;padding:4px 0;position:relative}
+nav.tabs a[aria-current="page"]{color:var(--accent)}
+nav.tabs svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+nav.tabs .badge{position:absolute;top:0;left:calc(50% + 6px);min-width:18px;height:18px;border-radius:9px;background:var(--late);color:#fff;font-size:11px;display:grid;place-items:center;padding:0 5px}
+
+/* Lave-vaisselle */
+.cycle{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:4px 0 18px}
+.cycle div{border-radius:14px;padding:10px 8px;background:var(--bg);text-align:center;font-size:13px;font-weight:600;color:var(--muted)}
+.cycle div svg{display:block;margin:0 auto 4px;width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.cycle div.on{background:var(--accent);color:var(--accent-ink)}
+.dishstate{font-family:var(--display);font-weight:700;font-size:34px;line-height:1.05;margin:0 0 4px;letter-spacing:-.02em}
+.turn{display:flex;align-items:center;gap:10px;background:var(--accent-soft);border-radius:14px;padding:10px 12px;margin:14px 0 4px;font-size:15px}
+.bars li{gap:10px}
+.bar{height:8px;border-radius:4px;background:var(--bg);overflow:hidden;margin-top:5px}
+.bar span{display:block;height:100%;border-radius:4px}
+
+/* Tâches */
+.check{width:30px;height:30px;flex:none;border-radius:50%;border:2px solid var(--line);background:none;display:grid;place-items:center;padding:0}
+.check svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;opacity:0}
+.check.done{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.check.done svg{opacity:1}
+.tbody{border:0;background:none;padding:0;text-align:left;flex:1;min-width:0}
+.donelist .t{text-decoration:line-through;text-decoration-color:var(--muted);color:var(--muted)}
+
+/* Feuilles (bottom sheets) */
+.scrim{position:fixed;inset:0;background:rgba(10,18,19,.45);z-index:20;animation:fade .2s ease}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:21;max-height:90vh;overflow:auto;background:var(--surface);border-radius:26px 26px 0 0;padding:10px 18px calc(env(safe-area-inset-bottom) + 18px);animation:up .26s cubic-bezier(.2,.8,.2,1)}
+.sheet .in{max-width:560px;margin:0 auto}
+.sheet .grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 14px}
+.sheet h2{font-family:var(--display);font-weight:700;font-size:24px;margin:0 0 4px;letter-spacing:-.015em}
+.sheet .lead{margin:0 0 16px;color:var(--muted)}
+.field{display:block;margin:0 0 16px}
+.field > span{display:block;font-weight:600;font-size:14px;margin-bottom:7px}
+.input{width:100%;min-height:50px;border-radius:14px;border:1.5px solid var(--line);background:var(--bg);padding:12px 14px;font-size:16px}
+.input:focus{outline:none;border-color:var(--accent)}
+input[type=time].input,input[type=date].input{-webkit-appearance:none;appearance:none}
+.summary{font-family:var(--display);font-weight:700;font-size:26px;margin:4px 0 6px;font-variant-numeric:tabular-nums}
+.err{color:var(--late);font-weight:600;font-size:14px;min-height:1.4em;margin:0 0 10px}
+.hint{background:var(--bg);border-radius:14px;padding:12px 14px;font-size:14px;margin:0 0 12px}
+.member-edit{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.member-edit .input.emoji{width:58px;text-align:center;padding:0;font-size:22px}
+.dot{width:14px;height:14px;border-radius:50%;flex:none}
+
+/* Choix du profil */
+.pick{min-height:80vh;display:flex;flex-direction:column;justify-content:center}
+.pick h1{font-family:var(--display);font-size:40px;margin:0 0 6px;letter-spacing:-.02em}
+.pick .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:22px}
+.pick .who{border:0;border-radius:22px;padding:20px 12px;background:var(--c);color:#fff;font-weight:700;font-size:17px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.pick .who span{font-size:40px;line-height:1}
+
+.demo{font-size:13px;color:var(--muted);text-align:center;margin:22px 0 0}
+#toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 140px);transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:999px;font-weight:600;font-size:14px;opacity:0;transition:.25s;z-index:30;pointer-events:none;white-space:nowrap}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+.loading{display:grid;place-items:center;min-height:70vh;color:var(--muted)}
+@keyframes up{from{transform:translateY(100%)}}
+@keyframes fade{from{opacity:0}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app"><div class="loading">Chargement…</div></div>
+<div id="sheet-root"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="config.js"></script>
+<script type="module">
+/* ============================================================
+   Maison — planning de la maison pour 4 personnes
+   ============================================================ */
+const cfg = window.MAISON_CONFIG || {};
+const DEMO = !cfg.firebase;
+const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
+const MIN = 6e4, HOUR = 36e5, DAY = 864e5;
+
+const DEFAULT_MEMBERS = [
+  { id: 'p1', name: 'Personne 1', emoji: '🦊', color: '#2F62C9' },
+  { id: 'p2', name: 'Personne 2', emoji: '🐻', color: '#C2620E' },
+  { id: 'p3', name: 'Personne 3', emoji: '🐼', color: '#B8336A' },
+  { id: 'p4', name: 'Personne 4', emoji: '🐸', color: '#23855A' },
+];
+const ROOMS = {
+  sdb:    { name: 'Salle de bain', the: 'la salle de bain', dur: 20 },
+  bureau: { name: 'Bureau',        the: 'le bureau',        dur: 60 },
+};
+const DURATIONS = [10, 15, 20, 30, 45, 60, 90, 120];
+const RECUR = { jour: 'Chaque jour', semaine: 'Chaque semaine', mois: 'Chaque mois' };
+const DISH = {
+  remplir: { label: 'À remplir', state: 'On peut le remplir', action: "Je l'ai lancé", next: 'lance' },
+  lance:   { label: 'En cours',  state: 'En train de laver',  action: 'Il est terminé', next: 'propre' },
+  propre:  { label: 'À vider',   state: 'Propre, à vider',    action: "Je l'ai vidé",  next: 'remplir' },
+};
+
+const S = {
+  members: DEFAULT_MEMBERS, bookings: [], tasks: [], dishlog: [], dish: null,
+  me: localStorage.getItem('maison.me'),
+  view: (location.hash.slice(1) || 'accueil'),
+  day: { sdb: dayStart(Date.now()), bureau: dayStart(Date.now()) },
+  taskFilter: 'moi', loaded: false,
+};
+let store;
+
+/* ---------- utilitaires ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function dayStart(t) { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); }
+function addDays(t, n) { const d = new Date(t); d.setDate(d.getDate() + n); return dayStart(d); }
+function addPeriod(t, p) {
+  const d = new Date(t);
+  if (p === 'jour') d.setDate(d.getDate() + 1);
+  else if (p === 'semaine') d.setDate(d.getDate() + 7);
+  else if (p === 'mois') d.setMonth(d.getMonth() + 1);
+  return dayStart(d);
+}
+const fmtT = t => { const d = new Date(t); return d.getHours() + 'h' + String(d.getMinutes()).padStart(2, '0'); };
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+function dayName(t) {
+  const t0 = dayStart(Date.now());
+  if (t === t0) return "aujourd'hui";
+  if (t === addDays(t0, 1)) return 'demain';
+  if (t === addDays(t0, -1)) return 'hier';
+  const sameWeekish = Math.abs(t - t0) < 6 * DAY;
+  return new Date(t).toLocaleDateString('fr-CH', sameWeekish ? { weekday: 'long' } : { weekday: 'short', day: 'numeric', month: 'short' });
+}
+function when(t) {
+  const diff = Date.now() - t;
+  if (diff < 60 * MIN) return diff < 2 * MIN ? "à l'instant" : `il y a ${Math.round(diff / MIN)} min`;
+  return `${dayName(dayStart(t))} ${fmtT(t)}`;
+}
+const member = id => S.members.find(m => m.id === id) || { id, name: '?', emoji: '·', color: '#8A9799' };
+const meM = () => member(S.me);
+const av = (id, cls = '') => { const m = member(id); return `<span class="av ${cls}" style="--c:${m.color}" aria-hidden="true">${esc(m.emoji)}</span>`; };
+const nameOf = id => id === S.me ? 'Toi' : member(id).name;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2400); }
+
+/* ---------- stockage : Firestore ou démo locale ---------- */
+async function firestoreStore() {
+  const [{ initializeApp }, fs, au] = await Promise.all([
+    import(FB + 'firebase-app.js'), import(FB + 'firebase-firestore.js'), import(FB + 'firebase-auth.js'),
+  ]);
+  const app = initializeApp(cfg.firebase);
+  await au.signInAnonymously(au.getAuth(app));
+  let db;
+  try { db = fs.initializeFirestore(app, { localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() }) }); }
+  catch { db = fs.getFirestore(app); }
+  const base = ['familles', cfg.famille || 'maison'];
+  const col = n => fs.collection(db, ...base, n);
+  const docRef = n => fs.doc(db, ...base, 'etat', n);
+  return {
+    listen: (n, cb) => fs.onSnapshot(col(n), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() })))),
+    listenDoc: (n, cb) => fs.onSnapshot(docRef(n), s => cb(s.exists() ? s.data() : null)),
+    add: (n, o) => fs.addDoc(col(n), o).then(r => r.id),
+    update: (n, id, o) => fs.updateDoc(fs.doc(col(n), id), o),
+    remove: (n, id) => fs.deleteDoc(fs.doc(col(n), id)),
+    setDoc: (n, o) => fs.setDoc(docRef(n), o, { merge: true }),
+  };
+}
+
+function localStore() {
+  const KEY = 'maison.demo.v1';
+  const read = () => { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } };
+  let db = read() || seedDemo();
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch {} };
+  save();
+  const subs = {};
+  const bc = 'BroadcastChannel' in window ? new BroadcastChannel('maison-demo') : null;
+  const value = key => key.startsWith('doc:') ? (db.docs[key.slice(4)] ?? null)
+    : Object.entries(db.cols[key] || {}).map(([id, v]) => ({ id, ...v }));
+  const emit = key => (subs[key] || []).forEach(cb => cb(value(key)));
+  const changed = key => { save(); emit(key); bc?.postMessage(key); };
+  if (bc) bc.onmessage = e => { db = read() || db; emit(e.data); };
+  const on = (key, cb) => { (subs[key] ??= new Set()).add(cb); cb(value(key)); return () => subs[key].delete(cb); };
+  return {
+    listen: on,
+    listenDoc: (n, cb) => on('doc:' + n, cb),
+    add: async (n, o) => { const id = Math.random().toString(36).slice(2, 10); (db.cols[n] ??= {})[id] = o; changed(n); return id; },
+    update: async (n, id, o) => { if (db.cols[n]?.[id]) Object.assign(db.cols[n][id], o); changed(n); },
+    remove: async (n, id) => { delete db.cols[n]?.[id]; changed(n); },
+    setDoc: async (n, o) => { db.docs[n] = { ...(db.docs[n] || {}), ...o }; changed('doc:' + n); },
+  };
+}
+
+function seedDemo() {
+  const now = Date.now(), t0 = dayStart(now), at = (d, h, m = 0) => addDays(t0, d) + h * HOUR + m * MIN;
+  const r5 = Math.floor(now / (5 * MIN)) * 5 * MIN;
+  return {
+    docs: { vaisselle: { status: 'propre', by: 'p2', at: now - 50 * MIN, roleFill: 'p2', roleEmpty: 'p4' } },
+    cols: {
+      bookings: {
+        a: { room: 'sdb', user: 'p2', start: r5 - 10 * MIN, end: r5 + 15 * MIN, note: 'Douche', createdAt: now },
+        b: { room: 'sdb', user: 'p3', start: at(0, 21, 0), end: at(0, 21, 30), note: '', createdAt: now },
+        c: { room: 'sdb', user: 'p1', start: at(1, 6, 40), end: at(1, 7, 0), note: '', createdAt: now },
+        d: { room: 'sdb', user: 'p4', start: at(1, 7, 0), end: at(1, 7, 20), note: '', createdAt: now },
+        e: { room: 'bureau', user: 'p4', start: r5 + 60 * MIN, end: r5 + 150 * MIN, note: 'Devoirs', createdAt: now },
+        f: { room: 'bureau', user: 'p1', start: at(1, 14, 0), end: at(1, 16, 0), note: '', createdAt: now },
+      },
+      tasks: {
+        t1: { title: 'Sortir les poubelles', assignee: 'p1', recur: 'semaine', due: t0, done: false, createdBy: 'p2', createdAt: now - 3 * DAY },
+        t2: { title: "Passer l'aspirateur au salon", assignee: null, recur: null, due: addDays(t0, 2), done: false, createdBy: 'p2', createdAt: now - DAY },
+        t3: { title: 'Changer les draps', assignee: 'p3', recur: null, due: addDays(t0, 1), done: false, createdBy: 'p2', createdAt: now - DAY },
+        t4: { title: 'Arroser les plantes', assignee: null, recur: 'semaine', due: addDays(t0, -1), done: false, createdBy: 'p1', createdAt: now - 9 * DAY, lastDoneBy: 'p4', lastDoneAt: now - 8 * DAY },
+        t5: { title: 'Racheter du liquide vaisselle', assignee: 'p2', recur: null, due: null, done: true, doneBy: 'p2', doneAt: now - 5 * HOUR, createdBy: 'p1', createdAt: now - 2 * DAY },
+        t6: { title: 'Ranger le garage', assignee: 'p1', recur: null, due: addDays(t0, 5), done: false, createdBy: 'p1', createdAt: now - 2 * DAY },
+      },
+      dishlog: {
+        l1: { type: 'vide', user: 'p1', at: now - 1 * DAY }, l2: { type: 'vide', user: 'p2', at: now - 2 * DAY },
+        l3: { type: 'vide', user: 'p1', at: now - 4 * DAY }, l4: { type: 'vide', user: 'p3', at: now - 5 * DAY },
+        l5: { type: 'lance', user: 'p2', at: now - 3 * HOUR }, l6: { type: 'lance', user: 'p4', at: now - 1 * DAY },
+        l7: { type: 'vide', user: 'p1', at: now - 7 * DAY },
+      },
+    },
+  };
+}
+
+/* ---------- notifications push ---------- */
+const pushReady = () => !!(cfg.pushServer && cfg.pushKey && cfg.vapidPublic);
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+
+function notify({ title, body, to = null, tag }) {
+  if (!pushReady()) return;
+  fetch(cfg.pushServer.replace(/\/$/, '') + '/notify', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: cfg.pushKey, from: S.me, to, title, body, tag, url: location.href.split('#')[0] }),
+  }).catch(() => {});
+}
+function b64ToU8(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
+async function registerPush() {
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(cfg.vapidPublic) });
+  const r = await fetch(cfg.pushServer.replace(/\/$/, '') + '/subscribe', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: cfg.pushKey, user: S.me, subscription: sub.toJSON() }),
+  });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Serveur injoignable');
+  localStorage.setItem('maison.push', S.me);
+  localStorage.setItem('maison.push.day', String(dayStart(Date.now())));
+}
+function pushState() {
+  if (!pushReady()) return 'noserver';
+  if (isIOS && !standalone) return 'install';
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return 'unsupported';
+  if (Notification.permission === 'denied') return 'denied';
+  if (Notification.permission === 'granted' && localStorage.getItem('maison.push')) return 'on';
+  return 'off';
+}
+
+/* ---------- état des pièces ---------- */
+function roomStatus(room, now = Date.now()) {
+  const list = S.bookings.filter(b => b.room === room && b.end > now).sort((a, b) => a.start - b.start);
+  const cur = list.find(b => b.start <= now);
+  const next = list.find(b => b.start > now);
+  return { cur, next };
+}
+function strip(room, day, showNow = true) {
+  const s = day + 6 * HOUR, e = day + 24 * HOUR, span = e - s, now = Date.now();
+  const blocks = S.bookings.filter(b => b.room === room && b.end > s && b.start < e).map(b => {
+    const a = Math.max(b.start, s), z = Math.min(b.end, e);
+    return `<i style="left:${((a - s) / span * 100).toFixed(2)}%;width:${((z - a) / span * 100).toFixed(2)}%;background:${member(b.user).color}"></i>`;
+  }).join('');
+  const nowMark = showNow && now > s && now < e ? `<b style="left:${((now - s) / span * 100).toFixed(2)}%"></b>` : '';
+  return `<div class="strip" aria-hidden="true">${blocks}${nowMark}</div><div class="ticks" aria-hidden="true"><span>6h</span><span>9h</span><span>12h</span><span>15h</span><span>18h</span><span>21h</span><span>24h</span></div>`;
+}
+function slab(room, compact) {
+  const { cur, next } = roomStatus(room);
+  const R = ROOMS[room], today = dayStart(Date.now());
+  let state, detail, busy = '', c = '';
+  if (cur) {
+    busy = ' busy'; c = member(cur.user).color;
+    state = cur.user === S.me ? 'Toi' : esc(member(cur.user).name);
+    detail = cur.user === S.me ? `C'est ton créneau jusqu'à ${fmtT(cur.end)}` : `Y est jusqu'à ${fmtT(cur.end)}`;
+    if (next && next.start - cur.end < 30 * MIN) detail += `, puis ${esc(nameOf(next.user))}`;
+  } else {
+    state = 'Libre';
+    detail = next && dayStart(next.start) === today
+      ? `Jusqu'à ${fmtT(next.start)}, ensuite c'est ${esc(nameOf(next.user)).toLowerCase() === 'toi' ? 'ton tour' : esc(nameOf(next.user))}`
+      : "Rien de prévu pour le reste de la journée";
+  }
+  return `<section class="slab${busy}" style="--c:${c}" aria-label="${R.name}">
+    <div class="room"><span>${R.name}</span></div>
+    ${compact ? `<button class="mini act" data-act="book" data-room="${room}" data-today="1">Réserver</button>` : ''}
+    <div class="state">${state}</div>
+    <p class="detail">${detail}</p>
+    ${strip(room, today)}
+  </section>`;
+}
+
+/* ---------- vues ---------- */
+const ICONS = {
+  accueil: '<path d="M4 11.5 12 5l8 6.5"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/>',
+  sdb: '<path d="M4 12h16v2a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5v-2Z"/><path d="M6 12V6.5A2.5 2.5 0 0 1 8.5 4c1.2 0 2.1.8 2.4 1.9"/><path d="M7 19l-1 2M17 19l1 2"/>',
+  bureau: '<rect x="4" y="5" width="16" height="10" rx="1.5"/><path d="M2.5 19h19"/><path d="M10 15v4M14 15v4"/>',
+  vaisselle: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 8h16"/><circle cx="12" cy="14.5" r="3.5"/><path d="M7 5.5h.01M10 5.5h.01"/>',
+  taches: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+};
+const icon = (k, cls = '') => `<svg viewBox="0 0 24 24" class="${cls}" aria-hidden="true">${ICONS[k]}</svg>`;
+
+const myOpenTasks = () => S.tasks.filter(t => !t.done && t.assignee === S.me);
+const freeTasks = () => S.tasks.filter(t => !t.done && !t.assignee);
+
+function header(title, sub) {
+  return `<header class="top"><div><h1>${title}</h1>${sub ? `<p>${sub}</p>` : ''}</div>
+    <button class="me" data-act="settings" aria-label="Réglages et profil">${av(S.me, 'lg')}</button></header>`;
+}
+function nav() {
+  const tabs = [['accueil', 'Accueil'], ['sdb', 'Salle de bain'], ['bureau', 'Bureau'], ['vaisselle', 'Vaisselle'], ['taches', 'Tâches']];
+  const n = myOpenTasks().length;
+  return `<nav class="tabs" aria-label="Sections"><div class="in">${tabs.map(([k, l]) =>
+    `<a href="#${k}" ${S.view === k ? 'aria-current="page"' : ''}>${icon(k)}${l}${k === 'taches' && n ? `<span class="badge">${n}</span>` : ''}</a>`).join('')}</div></nav>`;
+}
+
+function viewAccueil() {
+  const today = new Date().toLocaleDateString('fr-CH', { weekday: 'long', day: 'numeric', month: 'long' });
+  const d = dishDoc();
+  const mine = sortTasks(myOpenTasks()).slice(0, 4);
+  const free = freeTasks().length;
+  const duty = dutyText(d);
+  return header(`Salut ${esc(meM().name)}`, cap(today)) + `
+    <div class="rooms">${slab('sdb', true)}${slab('bureau', true)}</div>
+    <section class="block">
+      <h2>Lave-vaisselle <a href="#vaisselle">Ouvrir</a></h2>
+      <ul class="rows"><li>
+        <div class="grow"><div class="t">${DISH[d.status].state}</div>
+        <div class="m">${d.by ? `${esc(nameOf(d.by))}, ${when(d.at)}` : ''}${duty ? `<span>${duty}</span>` : ''}</div></div>
+        <button class="small" data-act="dish-next">${DISH[d.status].action}</button>
+      </li></ul>
+    </section>
+    <section class="block">
+      <h2>Mes tâches <a href="#taches">Tout voir</a></h2>
+      ${mine.length ? `<ul class="rows">${mine.map(taskRow).join('')}</ul>` : `<p class="empty">Rien pour toi en ce moment.</p>`}
+      ${free ? `<button class="link" data-act="goto-free">${free} tâche${free > 1 ? 's' : ''} libre${free > 1 ? 's' : ''} à prendre</button>` : ''}
+    </section>
+    ${DEMO ? `<p class="demo">Mode démo : les données restent sur ce téléphone. Configure Firebase dans config.js pour partager.</p>` : ''}`;
+}
+
+function viewRoom(room) {
+  const R = ROOMS[room], t0 = dayStart(Date.now()), sel = S.day[room];
+  const days = Array.from({ length: 8 }, (_, i) => addDays(t0, i));
+  const list = S.bookings.filter(b => b.room === room && dayStart(b.start) === sel).sort((a, b) => a.start - b.start);
+  const now = Date.now();
+  return header(R.name, 'Réserve un créneau, les autres sont prévenus') + slab(room, false) + `
+    <div class="scroller" role="group" aria-label="Jour">${days.map(d =>
+      `<button class="chip" data-act="pick-day" data-room="${room}" data-day="${d}" aria-pressed="${d === sel}">${cap(dayName(d))}</button>`).join('')}</div>
+    <section class="block">
+      <h2>${cap(dayName(sel))}</h2>
+      ${sel !== t0 ? `<div style="margin-bottom:12px">${strip(room, sel, false)}</div>` : ''}
+      ${list.length ? `<ul class="rows">${list.map(b => {
+        const past = b.end <= now, live = b.start <= now && b.end > now;
+        return `<li style="${past ? 'opacity:.5' : ''}">${av(b.user)}
+          <div class="grow"><div class="t"><span class="time">${fmtT(b.start)} – ${fmtT(b.end)}</span></div>
+          <div class="m"><span>${esc(nameOf(b.user))}${live ? ', en ce moment' : ''}</span>${b.note ? `<span>${esc(b.note)}</span>` : ''}</div></div>
+          ${b.user === S.me && !past ? `<button class="small neutral" data-act="cancel-booking" data-id="${b.id}">Annuler</button>` : ''}
+        </li>`;
+      }).join('')}</ul>` : `<p class="empty">Personne n'a réservé ${R.the} ce jour-là.</p>`}
+    </section>
+    <div class="dock"><button class="btn" data-act="book" data-room="${room}">Réserver ${R.the}</button></div>`;
+}
+
+function dishStats() {
+  const since = Date.now() - 30 * DAY;
+  const st = Object.fromEntries(S.members.map(m => [m.id, { id: m.id, vide: 0, lance: 0, last: 0 }]));
+  for (const l of S.dishlog) {
+    if (!st[l.user]) continue;
+    if (l.type === 'vide') st[l.user].last = Math.max(st[l.user].last, l.at);
+    if (l.at >= since) st[l.user][l.type]++;
+  }
+  const arr = Object.values(st);
+  return { arr };
+}
+const dishDoc = () => ({ status: 'remplir', ...(S.dish || {}) });
+// Qui est censé agir maintenant, selon l'état et les rôles attitrés
+function dishDuty(d) {
+  if (d.status === 'remplir') return { who: d.roleFill, verb: 'remplir et lancer' };
+  if (d.status === 'propre') return { who: d.roleEmpty, verb: 'vider' };
+  return null;
+}
+function dutyText(d) {
+  const x = dishDuty(d);
+  if (!x || !x.who) return '';
+  return x.who === S.me ? `C'est à toi de le ${x.verb}` : `À ${x.verb} par ${esc(member(x.who).name)}`;
+}
+function roleRow(r, label, id) {
+  return `<li>${id ? av(id) : '<span class="av" style="--c:var(--line)"></span>'}<div class="grow"><div class="m">${label}</div><div class="t">${id ? esc(nameOf(id)) : 'Personne'}</div></div>
+    <button class="small neutral" data-act="dish-role" data-r="${r}">Changer</button></li>`;
+}
+function viewVaisselle() {
+  const d = dishDoc();
+  const { arr } = dishStats();
+  const duty = dutyText(d);
+  const max = Math.max(1, ...arr.map(a => a.vide + a.lance));
+  const order = ['remplir', 'lance', 'propre'];
+  const ic = { remplir: '<path d="M5 9h14l-1.5 10h-11L5 9Z"/><path d="M9 9V5M15 9V5M12 9V4"/>', lance: '<path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"/><path d="M18 3v4h-4M6 21v-4h4"/>', propre: '<path d="M12 3l1.8 4.6L18.5 9l-4.7 1.4L12 15l-1.8-4.6L5.5 9l4.7-1.4L12 3Z"/><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z"/>' };
+  const hist = [...S.dishlog].sort((a, b) => b.at - a.at).slice(0, 8);
+  return header('Lave-vaisselle', 'Chacun son rôle, les autres peuvent dépanner') + `
+    <section class="block">
+      <div class="cycle" role="list">${order.map(k => `<div role="listitem" class="${d.status === k ? 'on' : ''}"><svg viewBox="0 0 24 24">${ic[k]}</svg>${DISH[k].label}</div>`).join('')}</div>
+      <p class="dishstate">${DISH[d.status].state}</p>
+      <p class="muted" style="margin:0">${d.by ? `Mis à jour par ${esc(nameOf(d.by))}, ${when(d.at)}` : 'Pas encore utilisé'}</p>
+      ${duty ? `<div class="turn">${av(dishDuty(d).who, 'sm')}<span>${duty}</span></div>` : ''}
+      <div style="margin-top:16px"><button class="btn" data-act="dish-next">${DISH[d.status].action}</button></div>
+      <button class="link" data-act="dish-fix">Corriger l'état</button>
+    </section>
+    <section class="block">
+      <h2>Qui fait quoi</h2>
+      <ul class="rows">${roleRow('fill', 'Remplit et lance', d.roleFill)}${roleRow('empty', 'Vide', d.roleEmpty)}</ul>
+    </section>
+    <section class="block">
+      <h2>30 derniers jours</h2>
+      <ul class="rows bars">${arr.map(a => { const m = member(a.id); return `<li>${av(a.id)}<div class="grow">
+        <div class="m" style="justify-content:space-between;color:var(--ink)"><strong>${esc(m.name)}</strong><span class="muted">${a.vide} vidé${a.vide > 1 ? 's' : ''}, ${a.lance} lancé${a.lance > 1 ? 's' : ''}</span></div>
+        <div class="bar"><span style="width:${((a.vide + a.lance) / max * 100).toFixed(0)}%;background:${m.color}"></span></div></div></li>`; }).join('')}</ul>
+    </section>
+    <section class="block">
+      <h2>Historique</h2>
+      ${hist.length ? `<ul class="rows">${hist.map(l => `<li>${av(l.user, 'sm')}<div class="grow"><span>${l.user === S.me ? `Tu as ${l.type === 'vide' ? 'vidé' : 'lancé'}` : `${esc(member(l.user).name)} a ${l.type === 'vide' ? 'vidé' : 'lancé'}`}</span> <span class="muted">${when(l.at)}</span></div></li>`).join('')}</ul>` : '<p class="empty">Rien pour l\'instant.</p>'}
+    </section>`;
+}
+
+function sortTasks(list) {
+  return [...list].sort((a, b) => (a.due ?? Infinity) - (b.due ?? Infinity) || (a.createdAt || 0) - (b.createdAt || 0));
+}
+function dueInfo(t) {
+  if (!t.due) return '';
+  const t0 = dayStart(Date.now()), diff = Math.round((t.due - t0) / DAY);
+  if (diff < 0) return `<span class="late">En retard${diff === -1 ? ' (hier)' : ` (${-diff} jours)`}</span>`;
+  return `<span>Pour ${dayName(t.due)}</span>`;
+}
+function taskRow(t) {
+  const meta = [];
+  if (!t.done) meta.push(dueInfo(t));
+  if (t.recur) meta.push(`<span>${RECUR[t.recur]}</span>`);
+  if (t.done) meta.push(`<span>Fait par ${esc(nameOf(t.doneBy))}, ${when(t.doneAt)}</span>`);
+  else if (t.assignee) meta.push(`<span style="display:inline-flex;gap:5px;align-items:center">${av(t.assignee, 'sm')}${esc(nameOf(t.assignee))}</span>`);
+  else meta.push('<span>Libre</span>');
+  if (!t.done && t.recur && t.lastDoneBy) meta.push(`<span>Dernière fois : ${esc(nameOf(t.lastDoneBy))}, ${when(t.lastDoneAt)}</span>`);
+  return `<li>
+    <button class="check ${t.done ? 'done' : ''}" data-act="${t.done ? 'task-undo' : 'task-done'}" data-id="${t.id}" aria-label="${t.done ? 'Marquer comme pas faite' : 'Marquer comme faite'} : ${esc(t.title)}"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+    <button class="tbody" data-act="task-edit" data-id="${t.id}"><div class="t">${esc(t.title)}</div><div class="m">${meta.filter(Boolean).join('')}</div></button>
+    ${!t.done && !t.assignee ? `<button class="small" data-act="task-take" data-id="${t.id}">Je prends</button>` : ''}
+  </li>`;
+}
+function viewTaches() {
+  const f = S.taskFilter;
+  const open = S.tasks.filter(t => !t.done);
+  const lists = {
+    moi: sortTasks(open.filter(t => t.assignee === S.me)),
+    libres: sortTasks(open.filter(t => !t.assignee)),
+    tout: sortTasks(open),
+    faites: S.tasks.filter(t => t.done).sort((a, b) => b.doneAt - a.doneAt),
+  };
+  const labels = { moi: 'À moi', libres: 'Libres', tout: 'Toutes', faites: 'Faites' };
+  const empty = {
+    moi: 'Aucune tâche pour toi. Prends-en une dans « Libres » ou ajoutes-en une.',
+    libres: 'Aucune tâche libre. Tout le monde est servi.',
+    tout: 'Aucune tâche en cours. Ajoute la première.',
+    faites: 'Les tâches terminées apparaîtront ici.',
+  };
+  const list = lists[f];
+  return header('Tâches', `${open.length} en cours dans la maison`) + `
+    <div class="seg" role="group" aria-label="Filtre">${Object.keys(labels).map(k =>
+      `<button data-act="task-filter" data-f="${k}" aria-pressed="${f === k}">${labels[k]} <span class="n">${k === 'faites' ? '' : lists[k].length}</span></button>`).join('')}</div>
+    <section class="block">${list.length ? `<ul class="rows ${f === 'faites' ? 'donelist' : ''}">${list.map(taskRow).join('')}</ul>` : `<p class="empty">${empty[f]}</p>`}</section>
+    <div class="dock"><button class="btn" data-act="task-new">Nouvelle tâche</button></div>`;
+}
+
+function viewPicker() {
+  return `<div class="pick"><h1>Qui es-tu ?</h1><p class="muted" style="margin:0">Choisis ton profil sur ce téléphone. Tu pourras changer les prénoms ensuite.</p>
+    <div class="grid">${S.members.map(m => `<button class="who" style="--c:${m.color}" data-act="pick-me" data-id="${m.id}"><span>${esc(m.emoji)}</span>${esc(m.name)}</button>`).join('')}</div>
+    ${DEMO ? `<p class="demo">Mode démo : les données restent sur ce téléphone.</p>` : ''}</div>`;
+}
+
+const VIEWS = { accueil: viewAccueil, sdb: () => viewRoom('sdb'), bureau: () => viewRoom('bureau'), vaisselle: viewVaisselle, taches: viewTaches };
+function render() {
+  const app = $('#app');
+  if (!S.loaded) return;
+  if (!S.me || !S.members.some(m => m.id === S.me)) { app.innerHTML = viewPicker(); return; }
+  if (!VIEWS[S.view]) S.view = 'accueil';
+  app.innerHTML = VIEWS[S.view]() + nav();
+}
+
+/* ---------- feuilles ---------- */
+function openSheet(html, mount) {
+  const root = $('#sheet-root');
+  root.innerHTML = `<div class="scrim" data-act="close-sheet"></div><div class="sheet" role="dialog" aria-modal="true"><div class="in"><div class="grab"></div>${html}</div></div>`;
+  mount?.(root.querySelector('.sheet'));
+}
+const closeSheet = () => { $('#sheet-root').innerHTML = ''; };
+
+function bookingSheet(room, today) {
+  const R = ROOMS[room];
+  const day = today ? dayStart(Date.now()) : S.day[room];
+  const isToday = day === dayStart(Date.now());
+  let dur = R.dur;
+  let startDefault = '07:00';
+  if (isToday) {
+    // premier créneau libre à partir de maintenant (arrondi aux 5 minutes)
+    const r5 = t => Math.ceil(t / (5 * MIN)) * 5 * MIN;
+    let cand = r5(Date.now());
+    for (let i = 0; i < 50; i++) {
+      const clash = S.bookings.find(b => b.room === room && b.start < cand + dur * MIN && b.end > cand);
+      if (!clash) break;
+      cand = r5(clash.end);
+    }
+    const n = new Date(cand);
+    startDefault = dayStart(cand) === day ? `${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}` : '23:55';
+  }
+  openSheet(`<h2>Réserver ${R.the}</h2><p class="lead">${cap(dayName(day))}</p>
+    <label class="field"><span>Début</span><input class="input" type="time" id="bk-start" value="${startDefault}" step="300"></label>
+    <div class="field"><span>Durée</span><div class="chips" id="bk-dur">${DURATIONS.map(m => `<button class="chip" data-m="${m}" aria-pressed="${m === dur}">${m < 60 ? m + ' min' : Math.floor(m / 60) + ' h' + (m % 60 ? String(m % 60).padStart(2, '0') : '')}</button>`).join('')}</div></div>
+    <p class="summary" id="bk-sum"></p><p class="err" id="bk-err"></p>
+    <label class="field"><span>Note (facultatif)</span><input class="input" id="bk-note" maxlength="60" placeholder="${room === 'sdb' ? 'Ex. douche + cheveux' : 'Ex. appel visio, ne pas déranger'}"></label>
+    <button class="btn" id="bk-go">Réserver</button>`, sh => {
+    const startEl = sh.querySelector('#bk-start'), sum = sh.querySelector('#bk-sum'), err = sh.querySelector('#bk-err'), go = sh.querySelector('#bk-go');
+    const compute = () => {
+      const [h, m] = (startEl.value || '00:00').split(':').map(Number);
+      const start = day + h * HOUR + m * MIN, end = start + dur * MIN;
+      sum.textContent = `${fmtT(start)} → ${fmtT(end)}`;
+      let msg = '';
+      const clash = S.bookings.find(b => b.room === room && b.start < end && b.end > start);
+      if (!startEl.value) msg = "Choisis une heure de début.";
+      else if (end <= Date.now()) msg = 'Ce créneau est déjà passé.';
+      else if (clash) msg = `Ça chevauche ${clash.user === S.me ? 'ta réservation' : 'la réservation de ' + member(clash.user).name} (${fmtT(clash.start)}–${fmtT(clash.end)}).`;
+      err.textContent = msg; go.disabled = !!msg;
+      return { start, end, ok: !msg };
+    };
+    sh.querySelector('#bk-dur').addEventListener('click', e => {
+      const b = e.target.closest('[data-m]'); if (!b) return;
+      dur = +b.dataset.m; sh.querySelectorAll('#bk-dur .chip').forEach(c => c.setAttribute('aria-pressed', c === b)); compute();
+    });
+    startEl.addEventListener('input', compute);
+    go.addEventListener('click', async () => {
+      const { start, end, ok } = compute(); if (!ok) return;
+      go.disabled = true;
+      const note = sh.querySelector('#bk-note').value.trim();
+      await store.add('bookings', { room, user: S.me, start, end, note, createdAt: Date.now() });
+      closeSheet(); toast('Créneau réservé');
+      notify({ title: `${R.name} réservé${room === 'sdb' ? 'e' : ''}`, body: `${meM().name} : ${dayName(day)} ${fmtT(start)}–${fmtT(end)}${note ? ` (${note})` : ''}`, tag: 'room-' + room });
+    });
+    compute();
+  });
+}
+
+function taskSheet(t) {
+  const isNew = !t;
+  t = t || { title: '', assignee: null, recur: null, due: null };
+  let assignee = t.assignee, recur = t.recur;
+  const dueVal = t.due ? new Date(t.due).toLocaleDateString('sv-SE') : '';
+  openSheet(`<h2>${isNew ? 'Nouvelle tâche' : 'Modifier la tâche'}</h2>
+    ${!isNew && t.createdBy ? `<p class="lead">Ajoutée par ${esc(nameOf(t.createdBy))}, ${when(t.createdAt)}</p>` : '<p class="lead">Attribue-la ou laisse-la libre : chacun pourra la prendre.</p>'}
+    <label class="field"><span>Quoi ?</span><input class="input" id="tk-title" maxlength="80" value="${esc(t.title)}" placeholder="Ex. sortir les poubelles"></label>
+    <div class="field"><span>Pour qui ?</span><div class="chips" id="tk-who">
+      <button class="chip" data-v="" aria-pressed="${!assignee}">Libre</button>
+      ${S.members.map(m => `<button class="chip" data-v="${m.id}" aria-pressed="${assignee === m.id}"><span class="dot" style="background:${m.color}"></span>${esc(m.id === S.me ? 'Moi' : m.name)}</button>`).join('')}</div></div>
+    <div class="field"><span>Répétition</span><div class="chips" id="tk-rec">
+      <button class="chip" data-v="" aria-pressed="${!recur}">Une fois</button>
+      ${Object.entries(RECUR).map(([k, l]) => `<button class="chip" data-v="${k}" aria-pressed="${recur === k}">${l}</button>`).join('')}</div></div>
+    <label class="field"><span>Pour quand ? (facultatif)</span><input class="input" type="date" id="tk-due" value="${dueVal}"></label>
+    <p class="err" id="tk-err"></p>
+    <button class="btn" id="tk-save">${isNew ? 'Ajouter la tâche' : 'Enregistrer'}</button>
+    ${isNew ? '' : '<button class="btn danger" id="tk-del">Supprimer la tâche</button>'}`, sh => {
+    const pick = (sel, set) => sh.querySelector(sel).addEventListener('click', e => {
+      const b = e.target.closest('[data-v]'); if (!b) return;
+      set(b.dataset.v || null); sh.querySelectorAll(sel + ' .chip').forEach(c => c.setAttribute('aria-pressed', c === b));
+    });
+    pick('#tk-who', v => assignee = v);
+    pick('#tk-rec', v => recur = v);
+    sh.querySelector('#tk-save').addEventListener('click', async () => {
+      const title = sh.querySelector('#tk-title').value.trim();
+      if (!title) { sh.querySelector('#tk-err').textContent = 'Donne un nom à la tâche.'; return; }
+      const dv = sh.querySelector('#tk-due').value;
+      let due = dv ? dayStart(new Date(dv + 'T12:00').getTime()) : null;
+      if (recur && !due) due = dayStart(Date.now());
+      const data = { title, assignee: assignee || null, recur: recur || null, due };
+      if (isNew) {
+        await store.add('tasks', { ...data, done: false, createdBy: S.me, createdAt: Date.now() });
+        toast('Tâche ajoutée');
+        if (data.assignee && data.assignee !== S.me) notify({ title: 'Nouvelle tâche pour toi', body: `${title} (de ${meM().name})`, to: [data.assignee], tag: 'task' });
+        else if (!data.assignee) notify({ title: 'Nouvelle tâche libre', body: `${title}. Qui la prend ?`, tag: 'task' });
+      } else {
+        await store.update('tasks', t.id, data);
+        toast('Tâche enregistrée');
+        if (data.assignee && data.assignee !== t.assignee && data.assignee !== S.me) notify({ title: 'Une tâche t\'a été attribuée', body: `${title} (par ${meM().name})`, to: [data.assignee], tag: 'task' });
+      }
+      closeSheet();
+    });
+    sh.querySelector('#tk-del')?.addEventListener('click', async () => {
+      if (!confirm(`Supprimer « ${t.title} » ?`)) return;
+      await store.remove('tasks', t.id); closeSheet(); toast('Tâche supprimée');
+    });
+    if (isNew) setTimeout(() => sh.querySelector('#tk-title').focus(), 250);
+  });
+}
+
+function settingsSheet() {
+  const ps = pushState();
+  const pushHtml = {
+    noserver: `<p class="hint">Le serveur de notifications n'est pas encore configuré. Suis l'étape « Notifications » du guide, puis remplis config.js.</p>`,
+    install: `<p class="hint">Sur iPhone, les notifications marchent seulement depuis l'app installée : touche le bouton Partager de Safari, puis « Sur l'écran d'accueil », et rouvre Maison depuis la nouvelle icône.</p>`,
+    unsupported: `<p class="hint">Ce navigateur ne gère pas les notifications. Ouvre l'app dans Chrome (Android) ou installe-la depuis Safari (iPhone).</p>`,
+    denied: `<p class="hint">Les notifications sont bloquées pour Maison. Autorise-les dans les réglages du téléphone, puis reviens ici.</p>`,
+    on: `<p class="hint">Activées sur ce téléphone pour ${esc(meM().name)}.</p><button class="btn ghost" data-act="push-test">Envoyer une notification de test</button>`,
+    off: `<button class="btn ghost" data-act="push-on">Activer les notifications</button>`,
+  }[ps];
+  openSheet(`<h2>Réglages</h2><p class="lead">Ce téléphone appartient à :</p>
+    <div class="chips" style="margin-bottom:22px">${S.members.map(m => `<button class="chip" data-act="switch-me" data-id="${m.id}" aria-pressed="${m.id === S.me}"><span class="dot" style="background:${m.color}"></span>${esc(m.name)}</button>`).join('')}</div>
+    <div class="field"><span>Notifications</span>${pushHtml}</div>
+    <div class="field"><span>Prénoms et emojis de la famille</span>
+      ${S.members.map(m => `<div class="member-edit"><span class="dot" style="background:${m.color}"></span>
+        <input class="input emoji" data-emoji="${m.id}" value="${esc(m.emoji)}" maxlength="4" aria-label="Emoji de ${esc(m.name)}">
+        <input class="input" data-name="${m.id}" value="${esc(m.name)}" maxlength="20" aria-label="Prénom"></div>`).join('')}
+      <button class="btn ghost" data-act="save-members" style="margin-top:6px">Enregistrer les prénoms</button></div>
+    ${DEMO ? `<p class="hint">Mode démo : rien n'est partagé entre les téléphones tant que Firebase n'est pas configuré dans config.js.</p><button class="link" data-act="demo-reset">Remettre les données de démo à zéro</button>` : ''}`);
+}
+
+/* ---------- actions ---------- */
+const ACTIONS = {
+  'close-sheet': closeSheet,
+  'pick-me': d => { S.me = d.id; localStorage.setItem('maison.me', d.id); render(); },
+  'switch-me': async d => {
+    S.me = d.id; localStorage.setItem('maison.me', d.id); closeSheet(); render(); toast(`Profil : ${meM().name}`);
+    if (pushState() === 'on' || (localStorage.getItem('maison.push') && Notification.permission === 'granted')) registerPush().catch(() => {});
+  },
+  settings: settingsSheet,
+  'save-members': async () => {
+    const list = S.members.map(m => ({
+      ...m,
+      name: (document.querySelector(`[data-name="${m.id}"]`).value.trim() || m.name).slice(0, 20),
+      emoji: (document.querySelector(`[data-emoji="${m.id}"]`).value.trim() || m.emoji),
+    }));
+    await store.setDoc('membres', { list }); closeSheet(); toast('Prénoms enregistrés');
+  },
+  'push-on': async (d, el) => {
+    el.disabled = true; el.textContent = 'Activation…';
+    try {
+      const p = await Notification.requestPermission();
+      if (p !== 'granted') throw new Error("Tu n'as pas autorisé les notifications.");
+      await registerPush(); toast('Notifications activées'); settingsSheet();
+    } catch (e) { el.disabled = false; el.textContent = 'Activer les notifications'; toast(e.message || 'Échec'); }
+  },
+  'push-test': () => { notify({ title: 'Maison', body: 'Les notifications fonctionnent sur ce téléphone.', to: [S.me], tag: 'test' }); toast('Notification envoyée'); },
+  'demo-reset': () => { localStorage.removeItem('maison.demo.v1'); location.reload(); },
+  book: d => bookingSheet(d.room, !!d.today),
+  'pick-day': d => { S.day[d.room] = +d.day; render(); },
+  'cancel-booking': async d => {
+    const b = S.bookings.find(x => x.id === d.id); if (!b) return;
+    if (!confirm(`Annuler ton créneau de ${fmtT(b.start)} à ${fmtT(b.end)} ?`)) return;
+    await store.remove('bookings', b.id); toast('Créneau annulé');
+    notify({ title: `${ROOMS[b.room].name} : créneau libéré`, body: `${meM().name} a annulé ${dayName(dayStart(b.start))} ${fmtT(b.start)}–${fmtT(b.end)}`, tag: 'room-' + b.room });
+  },
+  'dish-next': async () => {
+    const d = dishDoc(), cur = d.status, next = DISH[cur].next, now = Date.now();
+    const helped = role => role && role !== S.me; // quelqu'un d'autre que le responsable l'a fait
+    // Sans rôle attribué : tout le monde est prévenu. Sinon seulement les responsables (sauf moi).
+    const notifyRoles = (ids, msg) => {
+      const set = ids.filter(Boolean);
+      if (!set.length) return notify(msg);
+      const to = [...new Set(set.filter(x => x !== S.me))];
+      if (to.length) notify({ ...msg, to });
+    };
+    await store.setDoc('vaisselle', { status: next, by: S.me, at: now });
+    if (cur === 'remplir') {
+      await store.add('dishlog', { type: 'lance', user: S.me, at: now });
+      toast(helped(d.roleFill) ? "Lancé, merci d'avoir dépanné" : 'Lave-vaisselle lancé');
+      notify({ title: 'Lave-vaisselle lancé', body: `Par ${meM().name}. On n'y met plus rien pour l'instant.`, tag: 'dish' });
+    }
+    if (cur === 'lance') {
+      toast('Noté : il est propre');
+      notifyRoles([d.roleEmpty], { title: 'Lave-vaisselle propre', body: d.roleEmpty ? 'Tu peux le vider.' : 'Il faut le vider.', tag: 'dish' });
+    }
+    if (cur === 'propre') {
+      await store.add('dishlog', { type: 'vide', user: S.me, at: now });
+      toast(helped(d.roleEmpty) ? "Vidé, merci d'avoir dépanné" : 'Merci, il est vidé');
+      // prévient celui qui remplit, et celui qui devait vider s'il a été dépanné
+      notifyRoles([d.roleFill, d.roleEmpty], { title: 'Lave-vaisselle vidé', body: `Par ${meM().name}. Il peut être rempli.`, tag: 'dish' });
+    }
+  },
+  'dish-role': d => {
+    const key = d.r === 'fill' ? 'roleFill' : 'roleEmpty', cur = dishDoc()[key] || '';
+    openSheet(`<h2>${d.r === 'fill' ? 'Qui remplit et lance ?' : 'Qui vide ?'}</h2><p class="lead">Les autres pourront toujours dépanner.</p>
+      <div class="chips">${S.members.map(m => `<button class="chip" data-act="dish-role-set" data-k="${key}" data-id="${m.id}" aria-pressed="${cur === m.id}"><span class="dot" style="background:${m.color}"></span>${esc(m.name)}</button>`).join('')}
+      <button class="chip" data-act="dish-role-set" data-k="${key}" data-id="" aria-pressed="${!cur}">Personne</button></div>`);
+  },
+  'dish-role-set': async d => { await store.setDoc('vaisselle', { [d.k]: d.id || null }); closeSheet(); toast('Rôle enregistré'); },
+  'dish-fix': () => openSheet(`<h2>Corriger l'état</h2><p class="lead">Sans rien ajouter à l'historique.</p>
+    ${Object.entries(DISH).map(([k, v]) => `<button class="btn ghost" data-act="dish-set" data-s="${k}">${v.state}</button>`).join('')}`),
+  'dish-set': async d => { await store.setDoc('vaisselle', { status: d.s, by: S.me, at: Date.now() }); closeSheet(); },
+  'task-filter': d => { S.taskFilter = d.f; render(); },
+  'goto-free': () => { S.taskFilter = 'libres'; location.hash = 'taches'; },
+  'task-new': () => taskSheet(null),
+  'task-edit': d => taskSheet(S.tasks.find(t => t.id === d.id)),
+  'task-take': async d => { await store.update('tasks', d.id, { assignee: S.me }); toast("C'est pour toi"); },
+  'task-done': async d => {
+    const t = S.tasks.find(x => x.id === d.id); if (!t) return;
+    const now = Date.now();
+    if (t.recur) {
+      const nextDue = addPeriod(Math.max(t.due ?? 0, dayStart(now)), t.recur);
+      await store.update('tasks', t.id, { due: nextDue, lastDoneBy: S.me, lastDoneAt: now });
+      toast(`Fait. Prochaine fois : ${dayName(nextDue)}`);
+    } else {
+      await store.update('tasks', t.id, { done: true, doneBy: S.me, doneAt: now });
+      toast('Bravo, une de moins');
+    }
+  },
+  'task-undo': async d => { await store.update('tasks', d.id, { done: false, doneBy: null, doneAt: null }); },
+};
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  const fn = ACTIONS[el.dataset.act]; if (!fn) return;
+  e.preventDefault(); fn(el.dataset, el);
+});
+addEventListener('hashchange', () => { S.view = location.hash.slice(1) || 'accueil'; render(); scrollTo(0, 0); });
+setInterval(() => { if (!$('#sheet-root').innerHTML) render(); }, 30 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+
+/* ---------- démarrage ---------- */
+let cleaned = false;
+function cleanup() {
+  if (cleaned) return; cleaned = true;
+  const now = Date.now();
+  S.bookings.filter(b => b.end < now - 7 * DAY).forEach(b => store.remove('bookings', b.id));
+  S.tasks.filter(t => t.done && t.doneAt < now - 30 * DAY).forEach(t => store.remove('tasks', t.id));
+  S.dishlog.filter(l => l.at < now - 90 * DAY).forEach(l => store.remove('dishlog', l.id));
+}
+async function start() {
+  try { store = DEMO ? localStore() : await firestoreStore(); }
+  catch (e) {
+    $('#app').innerHTML = `<div class="loading" style="text-align:center;padding:0 20px"><div><h1 style="font-family:var(--display)">Connexion impossible</h1><p class="muted">Vérifie la configuration Firebase dans config.js et que la connexion anonyme est activée.</p><p class="muted" style="font-size:13px">${esc(e.message)}</p></div></div>`;
+    return;
+  }
+  let pending = 5;
+  const ready = () => { if (pending > 0 && --pending === 0) { S.loaded = true; setTimeout(cleanup, 3000); } render(); };
+  store.listenDoc('membres', d => { if (d?.list?.length) S.members = d.list; ready(); });
+  store.listenDoc('vaisselle', d => { S.dish = d; ready(); });
+  store.listen('bookings', l => { S.bookings = l; ready(); });
+  store.listen('tasks', l => { S.tasks = l; ready(); });
+  store.listen('dishlog', l => { S.dishlog = l; ready(); });
+  if (S.me && pushState() === 'on' && localStorage.getItem('maison.push.day') !== String(dayStart(Date.now()))) registerPush().catch(() => {});
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+start();
+</script>
+</body>
+</html>
