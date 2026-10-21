@@ -170,6 +170,46 @@ input[type=time].input,input[type=date].input{-webkit-appearance:none;appearance
 #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 140px);transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:999px;font-weight:600;font-size:14px;opacity:0;transition:.25s;z-index:30;pointer-events:none;white-space:nowrap}
 #toast.show{opacity:1;transform:translate(-50%,0)}
 .loading{display:grid;place-items:center;min-height:70vh;color:var(--muted)}
+/* Pas de rafraîchissement natif d'Android : on gère le nôtre */
+html{overscroll-behavior-y:none}
+html.sheet-open,html.sheet-open body{overflow:hidden}
+.sheet{overscroll-behavior:contain;touch-action:pan-y}
+.sheet .in{position:relative}
+.x{position:absolute;right:-6px;top:-4px;width:40px;height:40px;border:0;border-radius:50%;background:var(--bg);display:grid;place-items:center;padding:0;color:var(--muted)}
+.x svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round}
+.sheet h2{padding-right:44px}
+.scroller.in-sheet{margin:0 -18px;padding:0 18px 4px}
+
+/* Indicateur "tirer pour rafraîchir" */
+#ptr{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 6px);z-index:15;width:40px;height:40px;border-radius:50%;background:var(--surface);color:var(--accent);display:grid;place-items:center;box-shadow:0 2px 10px rgba(0,0,0,.18);opacity:0;transform:translate(-50%,-46px);pointer-events:none}
+#ptr svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;transition:transform .2s}
+#ptr.armed svg{transform:rotate(180deg)}
+#ptr.spin svg{animation:spin .8s linear infinite}
+#ptr:not(.armed):not(.spin){transition:transform .2s,opacity .2s}
+
+/* Profil */
+.me-row li{padding-top:0}
+.av.xl{width:84px;height:84px;font-size:46px}
+.prof-preview{display:flex;justify-content:center;margin:4px 0 18px}
+.emojis{display:grid;grid-template-columns:repeat(8,1fr);gap:6px}
+.emojis button{aspect-ratio:1;border:0;border-radius:12px;background:var(--bg);font-size:22px;padding:0;display:grid;place-items:center}
+.emojis button[aria-pressed="true"]{box-shadow:inset 0 0 0 2.5px var(--accent);background:var(--accent-soft)}
+.swatches{display:flex;flex-wrap:wrap;gap:10px}
+.swatches button{width:40px;height:40px;border-radius:50%;border:0;background:var(--c);padding:0}
+.swatches button[aria-pressed="true"]{box-shadow:0 0 0 3px var(--surface),0 0 0 5.5px var(--c)}
+
+/* Code à 4 chiffres */
+.pin-dots{display:flex;justify-content:center;gap:16px;margin:10px 0 6px}
+.pin-dots i{width:16px;height:16px;border-radius:50%;border:2px solid var(--muted)}
+.pin-dots i.on{background:var(--ink);border-color:var(--ink)}
+.pin-dots.shake{animation:shake .35s}
+.pin-err{text-align:center}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:300px;margin:0 auto}
+.pad button{height:62px;border:0;border-radius:18px;background:var(--bg);font-size:26px;font-weight:600;display:grid;place-items:center}
+.pad button:active{background:var(--accent-soft)}
+.pad svg{width:28px;height:28px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round;stroke-linecap:round}
+@keyframes shake{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+@keyframes spin{to{transform:rotate(360deg)}}
 @keyframes up{from{transform:translateY(100%)}}
 @keyframes fade{from{opacity:0}}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
@@ -177,6 +217,7 @@ input[type=time].input,input[type=date].input{-webkit-appearance:none;appearance
 </head>
 <body>
 <div id="app"><div class="loading">Chargement…</div></div>
+<div id="ptr" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></svg></div>
 <div id="sheet-root"></div>
 <div id="toast" role="status" aria-live="polite"></div>
 <script src="config.js"></script>
@@ -269,6 +310,8 @@ async function firestoreStore() {
     update: (n, id, o) => fs.updateDoc(fs.doc(col(n), id), o),
     remove: (n, id) => fs.deleteDoc(fs.doc(col(n), id)),
     setDoc: (n, o) => fs.setDoc(docRef(n), o, { merge: true }),
+    // coupe et rétablit la connexion : force Firestore à renvoyer l'état à jour
+    refresh: async () => { await fs.disableNetwork(db); await fs.enableNetwork(db); },
   };
 }
 
@@ -452,7 +495,7 @@ function viewAccueil() {
 
 function viewRoom(room) {
   const R = ROOMS[room], t0 = dayStart(Date.now()), sel = S.day[room];
-  const days = Array.from({ length: 8 }, (_, i) => addDays(t0, i));
+  const days = Array.from({ length: DAYS_AHEAD }, (_, i) => addDays(t0, i));
   const list = S.bookings.filter(b => b.room === room && dayStart(b.start) === sel).sort((a, b) => a.start - b.start);
   const now = Date.now();
   return header(R.name, 'Réserve un créneau, les autres sont prévenus') + slab(room, false) + `
@@ -581,7 +624,7 @@ function viewTaches() {
 }
 
 function viewPicker() {
-  return `<div class="pick"><h1>Qui es-tu ?</h1><p class="muted" style="margin:0">Choisis ton profil sur ce téléphone. Tu pourras changer les prénoms ensuite.</p>
+  return `<div class="pick"><h1>Qui es-tu ?</h1><p class="muted" style="margin:0">Choisis ton profil. Ton code à 4 chiffres te sera demandé.</p>
     <div class="grid">${S.members.map(m => `<button class="who" style="--c:${m.color}" data-act="pick-me" data-id="${m.id}"><span>${esc(m.emoji)}</span>${esc(m.name)}</button>`).join('')}</div>
     ${DEMO ? `<p class="demo">Mode démo : les données restent sur ce téléphone.</p>` : ''}</div>`;
 }
@@ -596,20 +639,49 @@ function render() {
 }
 
 /* ---------- feuilles ---------- */
-function openSheet(html, mount) {
+// locked : feuille obligatoire (création du code), impossible à fermer
+function openSheet(html, mount, { locked = false } = {}) {
   const root = $('#sheet-root');
-  root.innerHTML = `<div class="scrim" data-act="close-sheet"></div><div class="sheet" role="dialog" aria-modal="true"><div class="in"><div class="grab"></div>${html}</div></div>`;
-  mount?.(root.querySelector('.sheet'));
+  root.innerHTML = `<div class="scrim" ${locked ? '' : 'data-act="close-sheet"'}></div>
+    <div class="sheet" role="dialog" aria-modal="true"><div class="in"><div class="grab"></div>
+    ${locked ? '' : `<button class="x" data-act="close-sheet" aria-label="Fermer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>`}
+    ${html}</div></div>`;
+  const sh = root.querySelector('.sheet');
+  document.documentElement.classList.add('sheet-open');
+  if (!locked) swipeToClose(sh);
+  mount?.(sh);
 }
-const closeSheet = () => { $('#sheet-root').innerHTML = ''; };
+const sheetOpen = () => !!$('#sheet-root').innerHTML;
+const closeSheet = () => { $('#sheet-root').innerHTML = ''; document.documentElement.classList.remove('sheet-open'); };
 
+// Glisser la feuille vers le bas pour la fermer (quand son contenu est tout en haut)
+function swipeToClose(sh) {
+  let y0 = null, dy = 0;
+  sh.addEventListener('touchstart', e => {
+    if (sh.scrollTop > 0 || e.target.closest('input')) { y0 = null; return; }
+    y0 = e.touches[0].clientY; dy = 0; sh.style.transition = 'none';
+  }, { passive: true });
+  sh.addEventListener('touchmove', e => {
+    if (y0 === null) return;
+    dy = e.touches[0].clientY - y0;
+    if (dy > 0) sh.style.transform = `translateY(${dy}px)`;
+  }, { passive: true });
+  sh.addEventListener('touchend', () => {
+    if (y0 === null) return;
+    y0 = null; sh.style.transition = 'transform .2s ease';
+    if (dy > 90) { sh.style.transform = 'translateY(100%)'; setTimeout(closeSheet, 180); }
+    else sh.style.transform = '';
+  });
+}
+
+const DAYS_AHEAD = 8; // aujourd'hui + 7 jours
 function bookingSheet(room, today) {
   const R = ROOMS[room];
-  const day = today ? dayStart(Date.now()) : S.day[room];
-  const isToday = day === dayStart(Date.now());
+  const t0 = dayStart(Date.now());
+  let day = today ? t0 : S.day[room];
   let dur = R.dur;
   let startDefault = '07:00';
-  if (isToday) {
+  if (day === t0) {
     // premier créneau libre à partir de maintenant (arrondi aux 5 minutes)
     const r5 = t => Math.ceil(t / (5 * MIN)) * 5 * MIN;
     let cand = r5(Date.now());
@@ -621,7 +693,10 @@ function bookingSheet(room, today) {
     const n = new Date(cand);
     startDefault = dayStart(cand) === day ? `${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}` : '23:55';
   }
-  openSheet(`<h2>Réserver ${R.the}</h2><p class="lead">${cap(dayName(day))}</p>
+  const days = Array.from({ length: DAYS_AHEAD }, (_, i) => addDays(t0, i));
+  openSheet(`<h2>Réserver ${R.the}</h2>
+    <div class="field"><span>Jour</span><div class="scroller in-sheet" id="bk-day">${days.map(d =>
+      `<button class="chip" data-d="${d}" aria-pressed="${d === day}">${cap(dayName(d))}</button>`).join('')}</div></div>
     <label class="field"><span>Début</span><input class="input" type="time" id="bk-start" value="${startDefault}" step="300"></label>
     <div class="field"><span>Durée</span><div class="chips" id="bk-dur">${DURATIONS.map(m => `<button class="chip" data-m="${m}" aria-pressed="${m === dur}">${m < 60 ? m + ' min' : Math.floor(m / 60) + ' h' + (m % 60 ? String(m % 60).padStart(2, '0') : '')}</button>`).join('')}</div></div>
     <p class="summary" id="bk-sum"></p><p class="err" id="bk-err"></p>
@@ -644,13 +719,18 @@ function bookingSheet(room, today) {
       const b = e.target.closest('[data-m]'); if (!b) return;
       dur = +b.dataset.m; sh.querySelectorAll('#bk-dur .chip').forEach(c => c.setAttribute('aria-pressed', c === b)); compute();
     });
+    sh.querySelector('#bk-day').addEventListener('click', e => {
+      const b = e.target.closest('[data-d]'); if (!b) return;
+      day = +b.dataset.d; sh.querySelectorAll('#bk-day .chip').forEach(c => c.setAttribute('aria-pressed', c === b)); compute();
+    });
     startEl.addEventListener('input', compute);
     go.addEventListener('click', async () => {
       const { start, end, ok } = compute(); if (!ok) return;
       go.disabled = true;
       const note = sh.querySelector('#bk-note').value.trim();
       await store.add('bookings', { room, user: S.me, start, end, note, createdAt: Date.now() });
-      closeSheet(); toast('Créneau réservé');
+      S.day[room] = day;
+      closeSheet(); render(); toast('Créneau réservé');
       notify({ title: `${R.name} réservé${room === 'sdb' ? 'e' : ''}`, body: `${meM().name} : ${dayName(day)} ${fmtT(start)}–${fmtT(end)}${note ? ` (${note})` : ''}`, tag: 'room-' + room });
     });
     compute();
@@ -718,34 +798,146 @@ function settingsSheet() {
     on: `<p class="hint">Activées sur ce téléphone pour ${esc(meM().name)}.</p><button class="btn ghost" data-act="push-test">Envoyer une notification de test</button>`,
     off: `<button class="btn ghost" data-act="push-on">Activer les notifications</button>`,
   }[ps];
-  openSheet(`<h2>Réglages</h2><p class="lead">Ce téléphone appartient à :</p>
-    <div class="chips" style="margin-bottom:22px">${S.members.map(m => `<button class="chip" data-act="switch-me" data-id="${m.id}" aria-pressed="${m.id === S.me}"><span class="dot" style="background:${m.color}"></span>${esc(m.name)}</button>`).join('')}</div>
+  openSheet(`<h2>Réglages</h2>
+    <ul class="rows me-row"><li>${av(S.me, 'lg')}<div class="grow"><div class="t">${esc(meM().name)}</div><div class="m">Profil de ce téléphone</div></div>
+      <button class="small" data-act="profile">Modifier</button></li></ul>
     <div class="field"><span>Notifications</span>${pushHtml}</div>
-    <div class="field"><span>Prénoms et emojis de la famille</span>
-      ${S.members.map(m => `<div class="member-edit"><span class="dot" style="background:${m.color}"></span>
-        <input class="input emoji" data-emoji="${m.id}" value="${esc(m.emoji)}" maxlength="4" aria-label="Emoji de ${esc(m.name)}">
-        <input class="input" data-name="${m.id}" value="${esc(m.name)}" maxlength="20" aria-label="Prénom"></div>`).join('')}
-      <button class="btn ghost" data-act="save-members" style="margin-top:6px">Enregistrer les prénoms</button></div>
-    ${DEMO ? `<p class="hint">Mode démo : rien n'est partagé entre les téléphones tant que Firebase n'est pas configuré dans config.js.</p><button class="link" data-act="demo-reset">Remettre les données de démo à zéro</button>` : ''}`);
+    <div class="field"><span>Famille</span><ul class="rows">${S.members.map(m => `<li>${av(m.id)}<div class="grow"><div class="t">${esc(m.name)}</div></div>
+      ${m.id === S.me ? '<span class="muted" style="font-size:13px">Toi</span>' : ''}</li>`).join('')}</ul>
+      <p class="muted" style="font-size:13px;margin:6px 0 0">Chacun modifie son prénom, son avatar et sa couleur depuis son propre téléphone.</p></div>
+    <button class="btn ghost" data-act="switch-open">Changer de profil sur ce téléphone</button>
+    ${DEMO ? `<p class="hint" style="margin-top:16px">Mode démo : rien n'est partagé entre les téléphones tant que Firebase n'est pas configuré dans config.js.</p><button class="link" data-act="demo-reset">Remettre les données de démo à zéro</button>` : ''}`);
+}
+
+/* ---------- profil : avatar, couleur, code ---------- */
+const EMOJIS = ['🦊', '🐻', '🐼', '🐸', '🐱', '🐶', '🐰', '🐨', '🦁', '🐯', '🐵', '🐧', '🦉', '🐢', '🐙', '🦄', '🐝', '🦋', '🐬', '🐳',
+  '🌵', '🌻', '🍀', '🌙', '⭐', '🔥', '⚡', '🌈', '⚽', '🎮', '🎸', '🎧', '🚌', '🚀', '🍕', '🍩', '☕', '👑', '💎', '🎨'];
+const PALETTE = ['#2F62C9', '#C2620E', '#B8336A', '#23855A', '#7448C4', '#0E7C86', '#B5372B', '#8A5A1F', '#475569', '#5F6F1E'];
+
+async function updateMember(id, patch) {
+  const list = S.members.map(m => m.id === id ? { ...m, ...patch } : m);
+  S.members = list;
+  await store.setDoc('membres', { list });
+}
+async function pinHash(id, pin) {
+  const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`maison:${cfg.famille || 'maison'}:${id}:${pin}`));
+  return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+
+function profileSheet() {
+  const m = meM();
+  let emoji = m.emoji, color = m.color;
+  openSheet(`<h2>Mon profil</h2>
+    <div class="prof-preview"><span class="av xl" id="pf-av" style="--c:${color}">${esc(emoji)}</span></div>
+    <label class="field"><span>Prénom</span><input class="input" id="pf-name" maxlength="20" value="${esc(m.name)}"></label>
+    <div class="field"><span>Avatar</span>
+      <div class="emojis" id="pf-emo">${EMOJIS.map(e => `<button data-e="${e}" aria-pressed="${e === emoji}">${e}</button>`).join('')}</div>
+      <input class="input" id="pf-emo-free" maxlength="4" placeholder="Ou tape un autre emoji" style="margin-top:10px"></div>
+    <div class="field"><span>Couleur</span>
+      <div class="swatches" id="pf-col">${PALETTE.map(c => `<button data-c="${c}" style="--c:${c}" aria-pressed="${c === color}" aria-label="Couleur ${c}"></button>`).join('')}</div></div>
+    <button class="btn" id="pf-save">Enregistrer</button>
+    <button class="btn ghost" data-act="pin-change">Changer mon code</button>`, sh => {
+    const avEl = sh.querySelector('#pf-av');
+    sh.querySelector('#pf-emo').addEventListener('click', e => {
+      const b = e.target.closest('[data-e]'); if (!b) return;
+      emoji = b.dataset.e; avEl.textContent = emoji; sh.querySelector('#pf-emo-free').value = '';
+      sh.querySelectorAll('#pf-emo button').forEach(x => x.setAttribute('aria-pressed', x === b));
+    });
+    sh.querySelector('#pf-emo-free').addEventListener('input', e => {
+      const v = e.target.value.trim(); if (!v) return;
+      emoji = v; avEl.textContent = v; sh.querySelectorAll('#pf-emo button').forEach(x => x.setAttribute('aria-pressed', 'false'));
+    });
+    sh.querySelector('#pf-col').addEventListener('click', e => {
+      const b = e.target.closest('[data-c]'); if (!b) return;
+      color = b.dataset.c; avEl.style.setProperty('--c', color);
+      sh.querySelectorAll('#pf-col button').forEach(x => x.setAttribute('aria-pressed', x === b));
+    });
+    sh.querySelector('#pf-save').addEventListener('click', async () => {
+      const name = (sh.querySelector('#pf-name').value.trim() || m.name).slice(0, 20);
+      await updateMember(S.me, { name, emoji, color }); closeSheet(); render(); toast('Profil enregistré');
+    });
+  });
+}
+
+// Pavé numérique : onPin(code) renvoie un message d'erreur, ou rien si c'est bon
+function pinPad({ title, lead, locked = false, onPin }) {
+  const del = '<svg viewBox="0 0 24 24"><path d="M9 6h11v12H9l-6-6 6-6Z"/><path d="m12 10 4 4M16 10l-4 4"/></svg>';
+  openSheet(`<h2>${title}</h2><p class="lead">${lead}</p>
+    <div class="pin-dots" id="pin-dots"><i></i><i></i><i></i><i></i></div>
+    <p class="err pin-err" id="pin-err"></p>
+    <div class="pad" id="pin-pad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button data-k="${n}">${n}</button>`).join('')}
+      <span></span><button data-k="0">0</button><button data-k="del" aria-label="Effacer">${del}</button></div>`, sh => {
+    let v = '', busy = false;
+    const dotsBox = sh.querySelector('#pin-dots'), dots = [...dotsBox.children], err = sh.querySelector('#pin-err');
+    const paint = () => dots.forEach((d, i) => d.classList.toggle('on', i < v.length));
+    sh.querySelector('#pin-pad').addEventListener('click', async e => {
+      const b = e.target.closest('[data-k]'); if (!b || busy) return;
+      if (b.dataset.k === 'del') { v = v.slice(0, -1); paint(); return; }
+      if (v.length >= 4) return;
+      v += b.dataset.k; paint(); err.textContent = '';
+      if (v.length < 4) return;
+      busy = true;
+      const msg = await onPin(v);
+      busy = false;
+      if (msg && sh.isConnected) {
+        err.textContent = msg; dotsBox.classList.add('shake');
+        setTimeout(() => dotsBox.classList.remove('shake'), 400);
+        v = ''; paint();
+      }
+    });
+  }, { locked });
+}
+function createPin(id, { locked = false, then } = {}) {
+  const m = member(id);
+  pinPad({
+    title: `Crée le code de ${esc(m.name)}`, locked,
+    lead: 'Choisis 4 chiffres et garde-les pour toi. Ce code sera demandé pour utiliser ce profil sur un téléphone.',
+    onPin: async first => {
+      pinPad({
+        title: 'Confirme ton code', lead: 'Tape-le une deuxième fois.', locked,
+        onPin: async second => {
+          if (second !== first) { setTimeout(() => createPin(id, { locked, then }), 900); return 'Les deux codes ne correspondent pas. On recommence.'; }
+          await updateMember(id, { pin: await pinHash(id, first) });
+          closeSheet(); toast('Code enregistré'); then?.();
+        },
+      });
+    },
+  });
+}
+const tries = { n: 0, until: 0 };
+function askPin(id, then) {
+  const m = member(id);
+  if (!m.pin) { createPin(id, { then }); return; }
+  pinPad({
+    title: `Code de ${esc(m.name)}`, lead: 'Tape le code de ce profil.',
+    onPin: async pin => {
+      if (Date.now() < tries.until) return `Trop d'essais. Réessaie dans ${Math.ceil((tries.until - Date.now()) / 1000)} secondes.`;
+      if (await pinHash(id, pin) === member(id).pin) { tries.n = 0; closeSheet(); then(); return; }
+      if (++tries.n >= 5) { tries.n = 0; tries.until = Date.now() + 30000; }
+      return 'Code incorrect.';
+    },
+  });
+}
+function becomeMe(id) {
+  S.me = id; localStorage.setItem('maison.me', id); render(); toast(`Salut ${member(id).name}`);
+  if (localStorage.getItem('maison.push') && 'Notification' in window && Notification.permission === 'granted') registerPush().catch(() => {});
+}
+// Profil choisi sur ce téléphone mais sans code : on oblige à en créer un
+function requirePin() {
+  if (S.me && S.members.some(m => m.id === S.me) && !meM().pin && !sheetOpen()) createPin(S.me, { locked: true });
 }
 
 /* ---------- actions ---------- */
 const ACTIONS = {
   'close-sheet': closeSheet,
-  'pick-me': d => { S.me = d.id; localStorage.setItem('maison.me', d.id); render(); },
-  'switch-me': async d => {
-    S.me = d.id; localStorage.setItem('maison.me', d.id); closeSheet(); render(); toast(`Profil : ${meM().name}`);
-    if (pushState() === 'on' || (localStorage.getItem('maison.push') && Notification.permission === 'granted')) registerPush().catch(() => {});
-  },
+  'pick-me': d => askPin(d.id, () => becomeMe(d.id)),
   settings: settingsSheet,
-  'save-members': async () => {
-    const list = S.members.map(m => ({
-      ...m,
-      name: (document.querySelector(`[data-name="${m.id}"]`).value.trim() || m.name).slice(0, 20),
-      emoji: (document.querySelector(`[data-emoji="${m.id}"]`).value.trim() || m.emoji),
-    }));
-    await store.setDoc('membres', { list }); closeSheet(); toast('Prénoms enregistrés');
-  },
+  profile: profileSheet,
+  'pin-change': () => askPin(S.me, () => createPin(S.me)),
+  'switch-open': () => openSheet(`<h2>Changer de profil</h2><p class="lead">Le code du profil choisi sera demandé.</p>
+    <ul class="rows">${S.members.filter(m => m.id !== S.me).map(m => `<li>${av(m.id)}<div class="grow"><div class="t">${esc(m.name)}</div></div>
+      <button class="small" data-act="switch-to" data-id="${m.id}">Choisir</button></li>`).join('')}</ul>`),
+  'switch-to': d => askPin(d.id, () => becomeMe(d.id)),
   'push-on': async (d, el) => {
     el.disabled = true; el.textContent = 'Activation…';
     try {
@@ -826,8 +1018,47 @@ document.addEventListener('click', e => {
   e.preventDefault(); fn(el.dataset, el);
 });
 addEventListener('hashchange', () => { S.view = location.hash.slice(1) || 'accueil'; render(); scrollTo(0, 0); });
-setInterval(() => { if (!$('#sheet-root').innerHTML) render(); }, 30 * 1000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+setInterval(() => { if (!sheetOpen()) render(); }, 30 * 1000);
+
+/* ---------- rafraîchissement ---------- */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function refreshData() {
+  await Promise.race([store?.refresh?.(), sleep(5000)]).catch(() => {});
+  await sleep(400);
+  render();
+}
+// Retour dans l'app après un moment en arrière-plan : on resynchronise sans rien demander
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { hiddenAt = Date.now(); return; }
+  render();
+  if (hiddenAt && Date.now() - hiddenAt > 15000) refreshData();
+});
+// Tirer la page vers le bas pour rafraîchir
+(() => {
+  const ptr = $('#ptr');
+  let y0 = null, d = 0, busy = false;
+  const reset = () => { ptr.style.transform = ''; ptr.style.opacity = 0; ptr.classList.remove('armed', 'spin'); };
+  addEventListener('touchstart', e => {
+    y0 = (busy || sheetOpen() || scrollY > 0 || !S.me) ? null : e.touches[0].clientY; d = 0;
+  }, { passive: true });
+  addEventListener('touchmove', e => {
+    if (y0 === null) return;
+    if (scrollY > 0) { y0 = null; reset(); return; }
+    d = Math.min(Math.max(0, e.touches[0].clientY - y0) * 0.5, 90);
+    ptr.style.transform = `translate(-50%, ${d - 46}px)`;
+    ptr.style.opacity = Math.min(1, d / 50);
+    ptr.classList.toggle('armed', d >= 60);
+  }, { passive: true });
+  addEventListener('touchend', async () => {
+    if (y0 === null) return;
+    y0 = null;
+    if (!ptr.classList.contains('armed')) { reset(); return; }
+    busy = true; ptr.classList.add('spin'); ptr.style.transform = 'translate(-50%, 18px)';
+    await refreshData();
+    busy = false; reset(); toast('Tout est à jour');
+  });
+})();
 
 /* ---------- démarrage ---------- */
 let cleaned = false;
@@ -845,7 +1076,10 @@ async function start() {
     return;
   }
   let pending = 5;
-  const ready = () => { if (pending > 0 && --pending === 0) { S.loaded = true; setTimeout(cleanup, 3000); } render(); };
+  const ready = () => {
+    if (pending > 0 && --pending === 0) { S.loaded = true; setTimeout(cleanup, 3000); setTimeout(requirePin, 1500); }
+    render();
+  };
   store.listenDoc('membres', d => { if (d?.list?.length) S.members = d.list; ready(); });
   store.listenDoc('vaisselle', d => { S.dish = d; ready(); });
   store.listen('bookings', l => { S.bookings = l; ready(); });
