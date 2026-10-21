@@ -2,15 +2,14 @@
 // Tant que "firebase" vaut null, l'app tourne en MODE DÉMO (données sur ce téléphone uniquement).
 window.MAISON_CONFIG = {
   // 1) Colle ici l'objet firebaseConfig de ta console Firebase (Paramètres du projet > Vos applications > Web)
-  firebase: null,
-  // firebase: {
-  //   apiKey: "...",
-  //   authDomain: "...firebaseapp.com",
-  //   projectId: "...",
-  //   storageBucket: "...",
-  //   messagingSenderId: "...",
-  //   appId: "..."
-  // },
+  firebase: {
+    apiKey: "AIzaSyA3PE2qlJvpw6JmUQtKk-vxXc_Bc2EIioI",
+    authDomain: "maison-69db7.firebaseapp.com",
+    projectId: "maison-69db7",
+    storageBucket: "maison-69db7.firebasestorage.app",
+    messagingSenderId: "329850590487",
+    appId: "1:329850590487:web:6d7cf822344009f5991352"
+  },
 
   // Nom du foyer (permet d'utiliser le même projet Firebase pour autre chose)
   famille: "maison",
