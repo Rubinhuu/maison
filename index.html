@@ -122,8 +122,8 @@ nav.tabs svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1
 nav.tabs .badge{position:absolute;top:0;left:calc(50% + 6px);min-width:18px;height:18px;border-radius:9px;background:var(--late);color:#fff;font-size:11px;display:grid;place-items:center;padding:0 5px}
 
 /* Lave-vaisselle */
-.cycle{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:4px 0 18px}
-.cycle div{border-radius:14px;padding:10px 8px;background:var(--bg);text-align:center;font-size:13px;font-weight:600;color:var(--muted)}
+.cycle{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:4px 0 18px}
+.cycle div{border-radius:14px;padding:10px 4px;background:var(--bg);text-align:center;font-size:13px;font-weight:600;color:var(--muted)}
 .cycle div svg{display:block;margin:0 auto 4px;width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .cycle div.on{background:var(--accent);color:var(--accent-ink)}
 .dishstate{font-family:var(--display);font-weight:700;font-size:34px;line-height:1.05;margin:0 0 4px;letter-spacing:-.02em}
@@ -170,6 +170,15 @@ input[type=time].input,input[type=date].input{-webkit-appearance:none;appearance
 #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 140px);transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:999px;font-weight:600;font-size:14px;opacity:0;transition:.25s;z-index:30;pointer-events:none;white-space:nowrap}
 #toast.show{opacity:1;transform:translate(-50%,0)}
 .loading{display:grid;place-items:center;min-height:70vh;color:var(--muted)}
+/* Parents : appel et relances */
+.call{display:grid;grid-template-columns:1.3fr 1fr;gap:10px;margin:0 0 14px}
+.call .btn + .btn{margin-top:0}
+.bell{width:36px;height:36px;flex:none;border:0;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;padding:0}
+.bell svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.turn .grow{flex:1}
+.mini-seg{flex:none;padding:3px;gap:2px;background:var(--bg);box-shadow:none}
+.mini-seg button{flex:none;padding:6px 10px;font-size:13px}
+
 /* Pas de rafraîchissement natif d'Android : on gère le nôtre */
 html{overscroll-behavior-y:none}
 html.sheet-open,html.sheet-open body{overflow:hidden}
@@ -242,11 +251,14 @@ const ROOMS = {
 };
 const DURATIONS = [10, 15, 20, 30, 45, 60, 90, 120];
 const RECUR = { jour: 'Chaque jour', semaine: 'Chaque semaine', mois: 'Chaque mois' };
+// alt : action secondaire (lancer sans qu'il soit plein)
 const DISH = {
-  remplir: { label: 'À remplir', state: 'On peut le remplir', action: "Je l'ai lancé", next: 'lance' },
-  lance:   { label: 'En cours',  state: 'En train de laver',  action: 'Il est terminé', next: 'propre' },
-  propre:  { label: 'À vider',   state: 'Propre, à vider',    action: "Je l'ai vidé",  next: 'remplir' },
+  remplir: { label: 'À remplir', state: 'En cours de remplissage', action: 'Il est plein',   next: 'plein', alt: { action: 'Lancé sans être plein', next: 'lance' } },
+  plein:   { label: 'Plein',     state: 'Plein, à lancer',         action: "Je l'ai lancé",  next: 'lance' },
+  lance:   { label: 'En cours',  state: 'En train de laver',       action: 'Il est terminé', next: 'propre' },
+  propre:  { label: 'À vider',   state: 'Propre, à vider',         action: "Je l'ai vidé",   next: 'remplir' },
 };
+const DISH_LOG = { rempli: ['a rempli', 'as rempli'], lance: ['a lancé', 'as lancé'], vide: ['a vidé', 'as vidé'] };
 
 const S = {
   members: DEFAULT_MEMBERS, bookings: [], tasks: [], dishlog: [], dish: null,
@@ -376,12 +388,38 @@ const pushReady = () => !!(cfg.pushServer && cfg.pushKey && cfg.vapidPublic);
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 
+// Renvoie la liste des profils réellement notifiés (null si le serveur n'est pas configuré ou injoignable)
 function notify({ title, body, to = null, tag }) {
-  if (!pushReady()) return;
-  fetch(cfg.pushServer.replace(/\/$/, '') + '/notify', {
+  if (!pushReady()) return Promise.resolve(null);
+  return fetch(cfg.pushServer.replace(/\/$/, '') + '/notify', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ key: cfg.pushKey, from: S.me, to, title, body, tag, url: location.href.split('#')[0] }),
-  }).catch(() => {});
+  }).then(r => r.json()).then(j => [...new Set((j.sent || []).filter(s => s.status >= 200 && s.status < 300).map(s => s.user))]).catch(() => null);
+}
+
+/* ---------- rôles parent / enfant ---------- */
+const isParent = id => member(id).role === 'parent';
+const iAmParent = () => isParent(S.me);
+// Tant qu'aucun parent n'est défini, n'importe qui peut faire la première attribution
+const canSetRoles = () => iAmParent() || !S.members.some(m => m.role === 'parent');
+const kids = () =>S.members.filter(m => m.role === 'enfant').map(m => m.id);
+const listNames = ids => { const n = ids.map(id => member(id).name); return n.length < 2 ? (n[0] || '') : n.slice(0, -1).join(', ') + ' et ' + n.at(-1); };
+// Envoie un message d'un parent et dit clairement qui l'a reçu
+async function send(to, title, body, tag) {
+  if (!to.length) { toast('Choisis au moins une personne'); return; }
+  const got = await notify({ title, body, to, tag });
+  if (got === null) { toast('Envoi impossible : notifications pas configurées'); return; }
+  const missed = to.filter(id => !got.includes(id));
+  if (!got.length) toast(`${listNames(missed)} n'${missed.length > 1 ? 'ont' : 'a'} pas activé les notifications`);
+  else if (missed.length) toast(`Envoyé à ${listNames(got)}. Pas reçu : ${listNames(missed)}`);
+  else toast(`Envoyé à ${listNames(got)}`);
+}
+// Anti-spam : un même rappel au maximum toutes les 2 minutes
+const lastNudge = {};
+function nudge(key, to, title, body) {
+  if (Date.now() - (lastNudge[key] || 0) < 2 * MIN) { toast('Déjà relancé il y a un instant'); return; }
+  lastNudge[key] = Date.now();
+  send(to, title, body, 'rappel-' + key);
 }
 function b64ToU8(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
 async function registerPush() {
@@ -453,7 +491,9 @@ const ICONS = {
   vaisselle: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 8h16"/><circle cx="12" cy="14.5" r="3.5"/><path d="M7 5.5h.01M10 5.5h.01"/>',
   taches: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
 };
-const icon = (k, cls = '') => `<svg viewBox="0 0 24 24" class="${cls}" aria-hidden="true">${ICONS[k]}</svg>`;
+const bellBtn = (act, id, label) => `<button class="bell" data-act="${act}" data-id="${id}" aria-label="${esc(label)}" title="${esc(label)}">
+  <svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg></button>`;
+const icon = (k, cls = '') =>`<svg viewBox="0 0 24 24" class="${cls}" aria-hidden="true">${ICONS[k]}</svg>`;
 
 const myOpenTasks = () => S.tasks.filter(t => !t.done && t.assignee === S.me);
 const freeTasks = () => S.tasks.filter(t => !t.done && !t.assignee);
@@ -475,13 +515,18 @@ function viewAccueil() {
   const mine = sortTasks(myOpenTasks()).slice(0, 4);
   const free = freeTasks().length;
   const duty = dutyText(d);
+  const who = dishDuty(d)?.who;
   return header(`Salut ${esc(meM().name)}`, cap(today)) + `
+    ${iAmParent() ? `<div class="call">
+      <button class="btn" data-act="call-meal">À table !</button>
+      <button class="btn ghost" data-act="call-open">Message</button></div>` : ''}
     <div class="rooms">${slab('sdb', true)}${slab('bureau', true)}</div>
     <section class="block">
       <h2>Lave-vaisselle <a href="#vaisselle">Ouvrir</a></h2>
       <ul class="rows"><li>
         <div class="grow"><div class="t">${DISH[d.status].state}</div>
         <div class="m">${d.by ? `${esc(nameOf(d.by))}, ${when(d.at)}` : ''}${duty ? `<span>${duty}</span>` : ''}</div></div>
+        ${iAmParent() && who && who !== S.me ? bellBtn('nudge-dish', '', `Relancer ${member(who).name}`) : ''}
         <button class="small" data-act="dish-next">${DISH[d.status].action}</button>
       </li></ul>
     </section>
@@ -518,19 +563,20 @@ function viewRoom(room) {
 
 function dishStats() {
   const since = Date.now() - 30 * DAY;
-  const st = Object.fromEntries(S.members.map(m => [m.id, { id: m.id, vide: 0, lance: 0, last: 0 }]));
+  const st = Object.fromEntries(S.members.map(m => [m.id, { id: m.id, rempli: 0, lance: 0, vide: 0 }]));
   for (const l of S.dishlog) {
-    if (!st[l.user]) continue;
-    if (l.type === 'vide') st[l.user].last = Math.max(st[l.user].last, l.at);
-    if (l.at >= since) st[l.user][l.type]++;
+    if (st[l.user] && l.at >= since && l.type in st[l.user]) st[l.user][l.type]++;
   }
   const arr = Object.values(st);
   return { arr };
 }
 const dishDoc = () => ({ status: 'remplir', ...(S.dish || {}) });
 // Qui est censé agir maintenant, selon l'état et les rôles attitrés
+// Celui qui lance : son propre rôle, sinon celui qui remplit
+const launcher = d => d.roleLaunch || d.roleFill;
 function dishDuty(d) {
-  if (d.status === 'remplir') return { who: d.roleFill, verb: 'remplir et lancer' };
+  if (d.status === 'remplir') return { who: d.roleFill, verb: 'remplir' };
+  if (d.status === 'plein') return { who: launcher(d), verb: 'lancer' };
   if (d.status === 'propre') return { who: d.roleEmpty, verb: 'vider' };
   return null;
 }
@@ -539,40 +585,43 @@ function dutyText(d) {
   if (!x || !x.who) return '';
   return x.who === S.me ? `C'est à toi de le ${x.verb}` : `À ${x.verb} par ${esc(member(x.who).name)}`;
 }
-function roleRow(r, label, id) {
-  return `<li>${id ? av(id) : '<span class="av" style="--c:var(--line)"></span>'}<div class="grow"><div class="m">${label}</div><div class="t">${id ? esc(nameOf(id)) : 'Personne'}</div></div>
+function roleRow(r, label, id, empty = 'Personne') {
+  return `<li>${id ? av(id) : '<span class="av" style="--c:var(--line)"></span>'}<div class="grow"><div class="m">${label}</div><div class="t">${id ? esc(nameOf(id)) : empty}</div></div>
     <button class="small neutral" data-act="dish-role" data-r="${r}">Changer</button></li>`;
 }
 function viewVaisselle() {
   const d = dishDoc();
   const { arr } = dishStats();
   const duty = dutyText(d);
-  const max = Math.max(1, ...arr.map(a => a.vide + a.lance));
-  const order = ['remplir', 'lance', 'propre'];
-  const ic = { remplir: '<path d="M5 9h14l-1.5 10h-11L5 9Z"/><path d="M9 9V5M15 9V5M12 9V4"/>', lance: '<path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"/><path d="M18 3v4h-4M6 21v-4h4"/>', propre: '<path d="M12 3l1.8 4.6L18.5 9l-4.7 1.4L12 15l-1.8-4.6L5.5 9l4.7-1.4L12 3Z"/><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z"/>' };
+  const max = Math.max(1, ...arr.map(a => a.rempli + a.lance + a.vide));
+  const order = ['remplir', 'plein', 'lance', 'propre'];
+  const pl = (n, w) => `${n} ${w}${n > 1 ? 's' : ''}`;
+  const ic = { remplir: '<path d="M5 9h14l-1.5 10h-11L5 9Z"/><path d="M12 4v7M9 8l3 3 3-3"/>', plein: '<path d="M5 9h14l-1.5 10h-11L5 9Z"/><path d="M8 9V5.5M11 9V4.5M14 9V5M17 9V6"/>', lance: '<path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"/><path d="M18 3v4h-4M6 21v-4h4"/>', propre: '<path d="M12 3l1.8 4.6L18.5 9l-4.7 1.4L12 15l-1.8-4.6L5.5 9l4.7-1.4L12 3Z"/><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z"/>' };
   const hist = [...S.dishlog].sort((a, b) => b.at - a.at).slice(0, 8);
   return header('Lave-vaisselle', 'Chacun son rôle, les autres peuvent dépanner') + `
     <section class="block">
       <div class="cycle" role="list">${order.map(k => `<div role="listitem" class="${d.status === k ? 'on' : ''}"><svg viewBox="0 0 24 24">${ic[k]}</svg>${DISH[k].label}</div>`).join('')}</div>
       <p class="dishstate">${DISH[d.status].state}</p>
       <p class="muted" style="margin:0">${d.by ? `Mis à jour par ${esc(nameOf(d.by))}, ${when(d.at)}` : 'Pas encore utilisé'}</p>
-      ${duty ? `<div class="turn">${av(dishDuty(d).who, 'sm')}<span>${duty}</span></div>` : ''}
-      <div style="margin-top:16px"><button class="btn" data-act="dish-next">${DISH[d.status].action}</button></div>
+      ${duty ? `<div class="turn">${av(dishDuty(d).who, 'sm')}<span class="grow">${duty}</span>
+        ${iAmParent() && dishDuty(d).who !== S.me ? `<button class="small" data-act="nudge-dish">Relancer</button>` : ''}</div>` : ''}
+      <div style="margin-top:16px"><button class="btn" data-act="dish-next">${DISH[d.status].action}</button>
+        ${DISH[d.status].alt ? `<button class="btn ghost" data-act="dish-alt">${DISH[d.status].alt.action}</button>` : ''}</div>
       <button class="link" data-act="dish-fix">Corriger l'état</button>
     </section>
     <section class="block">
       <h2>Qui fait quoi</h2>
-      <ul class="rows">${roleRow('fill', 'Remplit et lance', d.roleFill)}${roleRow('empty', 'Vide', d.roleEmpty)}</ul>
+      <ul class="rows">${roleRow('fill', 'Remplit', d.roleFill)}${roleRow('launch', 'Lance', d.roleLaunch, d.roleFill ? `Comme pour remplir (${esc(nameOf(d.roleFill))})` : 'Personne')}${roleRow('empty', 'Vide', d.roleEmpty)}</ul>
     </section>
     <section class="block">
       <h2>30 derniers jours</h2>
       <ul class="rows bars">${arr.map(a => { const m = member(a.id); return `<li>${av(a.id)}<div class="grow">
-        <div class="m" style="justify-content:space-between;color:var(--ink)"><strong>${esc(m.name)}</strong><span class="muted">${a.vide} vidé${a.vide > 1 ? 's' : ''}, ${a.lance} lancé${a.lance > 1 ? 's' : ''}</span></div>
-        <div class="bar"><span style="width:${((a.vide + a.lance) / max * 100).toFixed(0)}%;background:${m.color}"></span></div></div></li>`; }).join('')}</ul>
+        <div class="m" style="justify-content:space-between;color:var(--ink)"><strong>${esc(m.name)}</strong><span class="muted">${pl(a.rempli, 'rempli')}, ${pl(a.lance, 'lancé')}, ${pl(a.vide, 'vidé')}</span></div>
+        <div class="bar"><span style="width:${((a.rempli + a.lance + a.vide) / max * 100).toFixed(0)}%;background:${m.color}"></span></div></div></li>`; }).join('')}</ul>
     </section>
     <section class="block">
       <h2>Historique</h2>
-      ${hist.length ? `<ul class="rows">${hist.map(l => `<li>${av(l.user, 'sm')}<div class="grow"><span>${l.user === S.me ? `Tu as ${l.type === 'vide' ? 'vidé' : 'lancé'}` : `${esc(member(l.user).name)} a ${l.type === 'vide' ? 'vidé' : 'lancé'}`}</span> <span class="muted">${when(l.at)}</span></div></li>`).join('')}</ul>` : '<p class="empty">Rien pour l\'instant.</p>'}
+      ${hist.length ? `<ul class="rows">${hist.map(l => `<li>${av(l.user, 'sm')}<div class="grow"><span>${l.user === S.me ? `Tu ${(DISH_LOG[l.type] || DISH_LOG.lance)[1]}` : `${esc(member(l.user).name)} ${(DISH_LOG[l.type] || DISH_LOG.lance)[0]}`}</span> <span class="muted">${when(l.at)}</span></div></li>`).join('')}</ul>` : '<p class="empty">Rien pour l\'instant.</p>'}
     </section>`;
 }
 
@@ -597,6 +646,7 @@ function taskRow(t) {
     <button class="check ${t.done ? 'done' : ''}" data-act="${t.done ? 'task-undo' : 'task-done'}" data-id="${t.id}" aria-label="${t.done ? 'Marquer comme pas faite' : 'Marquer comme faite'} : ${esc(t.title)}"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
     <button class="tbody" data-act="task-edit" data-id="${t.id}"><div class="t">${esc(t.title)}</div><div class="m">${meta.filter(Boolean).join('')}</div></button>
     ${!t.done && !t.assignee ? `<button class="small" data-act="task-take" data-id="${t.id}">Je prends</button>` : ''}
+    ${!t.done && t.assignee && t.assignee !== S.me && iAmParent() ? bellBtn('nudge-task', t.id, `Relancer ${member(t.assignee).name}`) : ''}
   </li>`;
 }
 function viewTaches() {
@@ -754,6 +804,8 @@ function taskSheet(t) {
     <label class="field"><span>Pour quand ? (facultatif)</span><input class="input" type="date" id="tk-due" value="${dueVal}"></label>
     <p class="err" id="tk-err"></p>
     <button class="btn" id="tk-save">${isNew ? 'Ajouter la tâche' : 'Enregistrer'}</button>
+    ${!isNew && !t.done && iAmParent() && t.assignee !== S.me
+      ? `<button class="btn ghost" data-act="nudge-task" data-id="${t.id}">${t.assignee ? `Relancer ${esc(member(t.assignee).name)}` : 'Relancer les enfants'}</button>` : ''}
     ${isNew ? '' : '<button class="btn danger" id="tk-del">Supprimer la tâche</button>'}`, sh => {
     const pick = (sel, set) => sh.querySelector(sel).addEventListener('click', e => {
       const b = e.target.closest('[data-v]'); if (!b) return;
@@ -802,11 +854,90 @@ function settingsSheet() {
     <ul class="rows me-row"><li>${av(S.me, 'lg')}<div class="grow"><div class="t">${esc(meM().name)}</div><div class="m">Profil de ce téléphone</div></div>
       <button class="small" data-act="profile">Modifier</button></li></ul>
     <div class="field"><span>Notifications</span>${pushHtml}</div>
-    <div class="field"><span>Famille</span><ul class="rows">${S.members.map(m => `<li>${av(m.id)}<div class="grow"><div class="t">${esc(m.name)}</div></div>
-      ${m.id === S.me ? '<span class="muted" style="font-size:13px">Toi</span>' : ''}</li>`).join('')}</ul>
-      <p class="muted" style="font-size:13px;margin:6px 0 0">Chacun modifie son prénom, son avatar et sa couleur depuis son propre téléphone.</p></div>
+    <div class="field"><span>Famille</span><ul class="rows">${S.members.map(m => `<li>${av(m.id)}<div class="grow"><div class="t">${esc(m.name)}${m.id === S.me ? ' <span class="muted" style="font-weight:500">(toi)</span>' : ''}</div></div>
+      ${canSetRoles() ? `<div class="seg mini-seg">
+          <button data-act="set-role" data-id="${m.id}" data-r="parent" aria-pressed="${m.role === 'parent'}">Parent</button>
+          <button data-act="set-role" data-id="${m.id}" data-r="enfant" aria-pressed="${m.role === 'enfant'}">Enfant</button></div>`
+        : `<span class="muted" style="font-size:13px">${m.role === 'parent' ? 'Parent' : m.role === 'enfant' ? 'Enfant' : ''}</span>`}</li>`).join('')}</ul>
+      <p class="muted" style="font-size:13px;margin:6px 0 0">${canSetRoles() ? 'Les parents peuvent appeler et relancer les enfants. Seul un parent peut changer les rôles.' : ''}
+      Chacun modifie son prénom, son avatar et sa couleur depuis son propre téléphone.</p></div>
     <button class="btn ghost" data-act="switch-open">Changer de profil sur ce téléphone</button>
     ${DEMO ? `<p class="hint" style="margin-top:16px">Mode démo : rien n'est partagé entre les téléphones tant que Firebase n'est pas configuré dans config.js.</p><button class="link" data-act="demo-reset">Remettre les données de démo à zéro</button>` : ''}`);
+}
+
+/* ---------- lave-vaisselle : passage d'un état à l'autre ---------- */
+async function dishGo(next) {
+  const d = dishDoc(), now = Date.now();
+  const helped = role => role && role !== S.me; // quelqu'un d'autre que le responsable l'a fait
+  // Sans rôle attribué : tout le monde est prévenu. Sinon seulement les responsables (sauf moi).
+  const notifyRoles = (ids, msg) => {
+    const set = ids.filter(Boolean);
+    if (!set.length) return notify(msg);
+    const to = [...new Set(set.filter(x => x !== S.me))];
+    if (to.length) notify({ ...msg, to });
+  };
+  await store.setDoc('vaisselle', { status: next, by: S.me, at: now });
+  if (next === 'plein') {
+    await store.add('dishlog', { type: 'rempli', user: S.me, at: now });
+    toast(helped(d.roleFill) ? "Noté, merci d'avoir dépanné" : 'Noté : il est plein');
+    notifyRoles([launcher(d)], { title: 'Lave-vaisselle plein', body: 'Il faut le lancer.', tag: 'dish' });
+  }
+  if (next === 'lance') {
+    await store.add('dishlog', { type: 'lance', user: S.me, at: now });
+    toast(helped(launcher(d)) ? "Lancé, merci d'avoir dépanné" : 'Lave-vaisselle lancé');
+    notify({ title: 'Lave-vaisselle lancé', body: `Par ${meM().name}. On n'y met plus rien pour l'instant.`, tag: 'dish' });
+  }
+  if (next === 'propre') {
+    toast('Noté : il est propre');
+    notifyRoles([d.roleEmpty], { title: 'Lave-vaisselle propre', body: d.roleEmpty ? 'Tu peux le vider.' : 'Il faut le vider.', tag: 'dish' });
+  }
+  if (next === 'remplir') {
+    await store.add('dishlog', { type: 'vide', user: S.me, at: now });
+    toast(helped(d.roleEmpty) ? "Vidé, merci d'avoir dépanné" : 'Merci, il est vidé');
+    // prévient celui qui remplit, et celui qui devait vider s'il a été dépanné
+    notifyRoles([d.roleFill, d.roleEmpty], { title: 'Lave-vaisselle vidé', body: `Par ${meM().name}. Il peut être rempli.`, tag: 'dish' });
+  }
+}
+
+/* ---------- messages des parents ---------- */
+const PRESETS = ['À table ! 🍽️', 'On mange dans 10 minutes', "Venez m'aider une minute", 'On part dans 5 minutes', 'Rangez vos chambres'];
+// Par défaut les enfants ; si aucun rôle n'est défini, tous les autres
+function defaultCallees() {
+  const k = kids().filter(id => id !== S.me);
+  return k.length ? k : S.members.filter(m => m.id !== S.me).map(m => m.id);
+}
+function callSheet() {
+  const to = new Set(defaultCallees());
+  let msg = PRESETS[0];
+  openSheet(`<h2>Envoyer un message</h2><p class="lead">La notification arrive tout de suite sur leur téléphone.</p>
+    <div class="field"><span>À qui ?</span><div class="chips" id="cl-to">${S.members.filter(m => m.id !== S.me).map(m =>
+      `<button class="chip" data-v="${m.id}" aria-pressed="${to.has(m.id)}"><span class="dot" style="background:${m.color}"></span>${esc(m.name)}</button>`).join('')}</div></div>
+    <div class="field"><span>Message</span><div class="chips" id="cl-pre">${PRESETS.map((p, i) =>
+      `<button class="chip" data-i="${i}" aria-pressed="${i === 0}">${esc(p)}</button>`).join('')}</div>
+      <input class="input" id="cl-txt" maxlength="120" placeholder="Ou écris ton propre message" style="margin-top:10px"></div>
+    <button class="btn" id="cl-go">Envoyer</button>`, sh => {
+    sh.querySelector('#cl-to').addEventListener('click', e => {
+      const b = e.target.closest('[data-v]'); if (!b) return;
+      to.has(b.dataset.v) ? to.delete(b.dataset.v) : to.add(b.dataset.v);
+      b.setAttribute('aria-pressed', to.has(b.dataset.v));
+    });
+    const txt = sh.querySelector('#cl-txt'), pres = () => sh.querySelectorAll('#cl-pre .chip');
+    sh.querySelector('#cl-pre').addEventListener('click', e => {
+      const b = e.target.closest('[data-i]'); if (!b) return;
+      msg = PRESETS[+b.dataset.i]; txt.value = '';
+      pres().forEach(c => c.setAttribute('aria-pressed', c === b));
+    });
+    txt.addEventListener('input', () => {
+      const v = txt.value.trim();
+      if (v) { msg = v; pres().forEach(c => c.setAttribute('aria-pressed', 'false')); }
+    });
+    sh.querySelector('#cl-go').addEventListener('click', async () => {
+      if (!to.size) { toast('Choisis au moins une personne'); return; }
+      if (!txt.value.trim() && ![...pres()].some(c => c.getAttribute('aria-pressed') === 'true')) { toast('Choisis ou écris un message'); return; }
+      closeSheet();
+      await send([...to], `${meM().emoji} ${meM().name}`, msg, 'appel');
+    });
+  });
 }
 
 /* ---------- profil : avatar, couleur, code ---------- */
@@ -938,6 +1069,21 @@ const ACTIONS = {
     <ul class="rows">${S.members.filter(m => m.id !== S.me).map(m => `<li>${av(m.id)}<div class="grow"><div class="t">${esc(m.name)}</div></div>
       <button class="small" data-act="switch-to" data-id="${m.id}">Choisir</button></li>`).join('')}</ul>`),
   'switch-to': d => askPin(d.id, () => becomeMe(d.id)),
+  'set-role': async d => {
+    if (!canSetRoles()) return;
+    await updateMember(d.id, { role: d.r }); render(); settingsSheet();
+  },
+  'call-meal': () => send(defaultCallees(), `${meM().emoji} ${meM().name}`, 'À table ! 🍽️', 'appel'),
+  'call-open': callSheet,
+  'nudge-dish': () => {
+    const x = dishDuty(dishDoc()); if (!x?.who || !iAmParent()) return;
+    nudge('dish', [x.who], `Rappel de ${meM().name}`, `Le lave-vaisselle est à ${x.verb}.`);
+  },
+  'nudge-task': d => {
+    const t = S.tasks.find(x => x.id === d.id); if (!t || !iAmParent()) return;
+    const to = t.assignee ? [t.assignee] : defaultCallees();
+    nudge('task-' + t.id, to, `Rappel de ${meM().name}`, t.assignee ? `N'oublie pas : ${t.title}` : `Tâche libre à faire : ${t.title}`);
+  },
   'push-on': async (d, el) => {
     el.disabled = true; el.textContent = 'Activation…';
     try {
@@ -956,38 +1102,18 @@ const ACTIONS = {
     await store.remove('bookings', b.id); toast('Créneau annulé');
     notify({ title: `${ROOMS[b.room].name} : créneau libéré`, body: `${meM().name} a annulé ${dayName(dayStart(b.start))} ${fmtT(b.start)}–${fmtT(b.end)}`, tag: 'room-' + b.room });
   },
-  'dish-next': async () => {
-    const d = dishDoc(), cur = d.status, next = DISH[cur].next, now = Date.now();
-    const helped = role => role && role !== S.me; // quelqu'un d'autre que le responsable l'a fait
-    // Sans rôle attribué : tout le monde est prévenu. Sinon seulement les responsables (sauf moi).
-    const notifyRoles = (ids, msg) => {
-      const set = ids.filter(Boolean);
-      if (!set.length) return notify(msg);
-      const to = [...new Set(set.filter(x => x !== S.me))];
-      if (to.length) notify({ ...msg, to });
-    };
-    await store.setDoc('vaisselle', { status: next, by: S.me, at: now });
-    if (cur === 'remplir') {
-      await store.add('dishlog', { type: 'lance', user: S.me, at: now });
-      toast(helped(d.roleFill) ? "Lancé, merci d'avoir dépanné" : 'Lave-vaisselle lancé');
-      notify({ title: 'Lave-vaisselle lancé', body: `Par ${meM().name}. On n'y met plus rien pour l'instant.`, tag: 'dish' });
-    }
-    if (cur === 'lance') {
-      toast('Noté : il est propre');
-      notifyRoles([d.roleEmpty], { title: 'Lave-vaisselle propre', body: d.roleEmpty ? 'Tu peux le vider.' : 'Il faut le vider.', tag: 'dish' });
-    }
-    if (cur === 'propre') {
-      await store.add('dishlog', { type: 'vide', user: S.me, at: now });
-      toast(helped(d.roleEmpty) ? "Vidé, merci d'avoir dépanné" : 'Merci, il est vidé');
-      // prévient celui qui remplit, et celui qui devait vider s'il a été dépanné
-      notifyRoles([d.roleFill, d.roleEmpty], { title: 'Lave-vaisselle vidé', body: `Par ${meM().name}. Il peut être rempli.`, tag: 'dish' });
-    }
-  },
+  'dish-next': () => dishGo(DISH[dishDoc().status].next),
+  'dish-alt': () => { const a = DISH[dishDoc().status].alt; if (a) dishGo(a.next); },
   'dish-role': d => {
-    const key = d.r === 'fill' ? 'roleFill' : 'roleEmpty', cur = dishDoc()[key] || '';
-    openSheet(`<h2>${d.r === 'fill' ? 'Qui remplit et lance ?' : 'Qui vide ?'}</h2><p class="lead">Les autres pourront toujours dépanner.</p>
+    const R = {
+      fill: ['roleFill', 'Qui remplit ?', 'Personne'],
+      launch: ['roleLaunch', 'Qui lance ?', 'Comme pour remplir'],
+      empty: ['roleEmpty', 'Qui vide ?', 'Personne'],
+    }[d.r];
+    const [key, title, none] = R, cur = dishDoc()[key] || '';
+    openSheet(`<h2>${title}</h2><p class="lead">Les autres pourront toujours dépanner.</p>
       <div class="chips">${S.members.map(m => `<button class="chip" data-act="dish-role-set" data-k="${key}" data-id="${m.id}" aria-pressed="${cur === m.id}"><span class="dot" style="background:${m.color}"></span>${esc(m.name)}</button>`).join('')}
-      <button class="chip" data-act="dish-role-set" data-k="${key}" data-id="" aria-pressed="${!cur}">Personne</button></div>`);
+      <button class="chip" data-act="dish-role-set" data-k="${key}" data-id="" aria-pressed="${!cur}">${none}</button></div>`);
   },
   'dish-role-set': async d => { await store.setDoc('vaisselle', { [d.k]: d.id || null }); closeSheet(); toast('Rôle enregistré'); },
   'dish-fix': () => openSheet(`<h2>Corriger l'état</h2><p class="lead">Sans rien ajouter à l'historique.</p>
