@@ -1,5 +1,5 @@
 // Service worker de Maison : hors-ligne + notifications push
-const CACHE = 'maison-v1';
+const CACHE = 'maison-v2';
 const SHELL = ['./', './index.html', './config.js', './manifest.json', './icons/icon-192.png', './icons/badge-72.png'];
 
 self.addEventListener('install', e => {
@@ -20,7 +20,7 @@ self.addEventListener('fetch', e => {
   // Fichiers de l'app : réseau d'abord (mises à jour immédiates), cache si hors-ligne
   if (url.origin === location.origin) {
     e.respondWith(
-      fetch(req).then(res => {
+      fetch(req, { cache: 'no-cache' }).then(res => { // toujours vérifier auprès de GitHub (ignore le cache de 10 min)
         if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
         return res;
       }).catch(() => caches.match(req).then(r => r || caches.match('./index.html')))
