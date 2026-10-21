@@ -15,7 +15,7 @@ window.MAISON_CONFIG = {
   famille: "maison",
 
   // 2) Notifications : adresse de ton Cloudflare Worker + clés générées avec cles.html
-  pushServer: "",   // ex. "https://maison-push.ton-compte.workers.dev"
-  pushKey: "",      // FAMILY_KEY (la même que dans le Worker)
-  vapidPublic: ""   // VAPID_PUBLIC (la même que dans le Worker)
+  pushServer: "https://maison-push.r-s-antunes-10-08.workers.dev/",
+  pushKey: "A2uXoyFdoVtajeUgcvOcdmdffvLG4zYn",
+  vapidPublic: "BPE38c0tVL6-bMulw_xewv8xgeUADydDXLiHM4aUQ4QhpYWAZF89pXw3_3b3fX-Y_XIrcpNfZd4TOS9oaXmeh0A"
 };
