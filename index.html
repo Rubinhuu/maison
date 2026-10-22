@@ -122,7 +122,7 @@ nav.tabs svg{width:25px;height:25px;fill:none;stroke:currentColor;stroke-width:1
 nav.tabs .badge{position:absolute;top:0;left:calc(50% + 6px);min-width:18px;height:18px;border-radius:9px;background:var(--late);color:#fff;font-size:11px;display:grid;place-items:center;padding:0 5px}
 
 /* Lave-vaisselle */
-.cycle{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:4px 0 18px}
+.cycle{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:4px 0 18px}
 .cycle div{border-radius:14px;padding:10px 4px;background:var(--bg);text-align:center;font-size:13px;font-weight:600;color:var(--muted)}
 .cycle div svg{display:block;margin:0 auto 4px;width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .cycle div.on{background:var(--accent);color:var(--accent-ink)}
@@ -170,6 +170,9 @@ input[type=time].input,input[type=date].input{-webkit-appearance:none;appearance
 #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 140px);transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:999px;font-weight:600;font-size:14px;opacity:0;transition:.25s;z-index:30;pointer-events:none;white-space:nowrap}
 #toast.show{opacity:1;transform:translate(-50%,0)}
 .loading{display:grid;place-items:center;min-height:70vh;color:var(--muted)}
+.dish-actions{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:10px;margin-top:16px}
+.dish-actions .btn + .btn{margin-top:0}
+.dish-mini{display:flex;flex-direction:column;gap:6px}
 /* Parents : appel et relances */
 .call{display:grid;grid-template-columns:1.3fr 1fr;gap:10px;margin:0 0 14px}
 .call .btn + .btn{margin-top:0}
@@ -251,13 +254,13 @@ const ROOMS = {
 };
 const DURATIONS = [10, 15, 20, 30, 45, 60, 90, 120];
 const RECUR = { jour: 'Chaque jour', semaine: 'Chaque semaine', mois: 'Chaque mois' };
-// alt : action secondaire (lancer sans qu'il soit plein)
+// Chaque état propose ses boutons. "J'ai rempli" peut se répéter : l'état ne change pas.
 const DISH = {
-  remplir: { label: 'À remplir', state: 'En cours de remplissage', action: 'Il est plein',   next: 'plein', alt: { action: 'Lancé sans être plein', next: 'lance' } },
-  plein:   { label: 'Plein',     state: 'Plein, à lancer',         action: "Je l'ai lancé",  next: 'lance' },
-  lance:   { label: 'En cours',  state: 'En train de laver',       action: 'Il est terminé', next: 'propre' },
-  propre:  { label: 'À vider',   state: 'Propre, à vider',         action: "Je l'ai vidé",   next: 'remplir' },
+  remplir: { label: 'À remplir', state: 'À remplir',         actions: [['fill', "J'ai rempli", 'Rempli'], ['launch', 'Plein et lancé', 'Lancé']] },
+  lance:   { label: 'En cours',  state: 'En train de laver', actions: [['done', 'Il est terminé', 'Terminé']] },
+  propre:  { label: 'À vider',   state: 'Propre, à vider',   actions: [['empty', "Je l'ai vidé", 'Vidé']] },
 };
+const DISH_LAST = { fill: 'Rempli par', launch: 'Lancé par', done: 'Terminé, noté par', empty: 'Vidé par' };
 const DISH_LOG = { rempli: ['a rempli', 'as rempli'], lance: ['a lancé', 'as lancé'], vide: ['a vidé', 'as vidé'] };
 
 const S = {
@@ -421,6 +424,27 @@ function nudge(key, to, title, body) {
   lastNudge[key] = Date.now();
   send(to, title, body, 'rappel-' + key);
 }
+// Notification envoyée plus tard par le serveur (même si personne n'a l'app ouverte)
+function schedulePush(id, at, { title, body, to = null, tag }) {
+  if (!pushReady()) return;
+  fetch(cfg.pushServer.replace(/\/$/, '') + '/schedule', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: cfg.pushKey, id, at, from: null, to, title, body, tag, url: location.href.split('#')[0] }),
+  }).catch(() => {});
+}
+function unschedulePush(id) {
+  if (!pushReady()) return;
+  fetch(cfg.pushServer.replace(/\/$/, '') + '/unschedule', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: cfg.pushKey, id }),
+  }).catch(() => {});
+}
+function scheduleDishEnd(d, at) {
+  schedulePush('dish', at, {
+    title: 'Lave-vaisselle terminé', tag: 'dish',
+    body: d.roleEmpty ? 'Il est propre, tu peux le vider.' : 'Il est propre, il faut le vider.',
+    to: d.roleEmpty ? [d.roleEmpty] : null,
+  });
+}
 function b64ToU8(s) { s = s.replace(/-/g, '+').replace(/_/g, '/'); while (s.length % 4) s += '='; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
 async function registerPush() {
   const reg = await navigator.serviceWorker.ready;
@@ -525,9 +549,9 @@ function viewAccueil() {
       <h2>Lave-vaisselle <a href="#vaisselle">Ouvrir</a></h2>
       <ul class="rows"><li>
         <div class="grow"><div class="t">${DISH[d.status].state}</div>
-        <div class="m">${d.by ? `${esc(nameOf(d.by))}, ${when(d.at)}` : ''}${duty ? `<span>${duty}</span>` : ''}</div></div>
+        <div class="m">${dishLine(d) ? `<span>${dishLine(d)}</span>` : ''}${duty ? `<span>${duty}</span>` : ''}</div></div>
         ${iAmParent() && who && who !== S.me ? bellBtn('nudge-dish', '', `Relancer ${member(who).name}`) : ''}
-        <button class="small" data-act="dish-next">${DISH[d.status].action}</button>
+        <div class="dish-mini">${DISH[d.status].actions.map(([a, , short]) => `<button class="small" data-act="dish" data-a="${a}">${short}</button>`).join('')}</div>
       </li></ul>
     </section>
     <section class="block">
@@ -570,13 +594,26 @@ function dishStats() {
   const arr = Object.values(st);
   return { arr };
 }
-const dishDoc = () => ({ status: 'remplir', ...(S.dish || {}) });
+const WASH = 2 * HOUR; // durée du programme : passe tout seul à « À vider » ensuite
+const dishDoc = () => {
+  const d = { status: 'remplir', ...(S.dish || {}) };
+  if (!DISH[d.status]) d.status = 'remplir';
+  if (d.status === 'lance' && d.at && Date.now() - d.at >= WASH) { d.status = 'propre'; d.act = 'auto'; d.at += WASH; }
+  return d;
+};
+// Ligne "qui a fait quoi, quand" sous l'état
+function dishLine(d) {
+  if (d.act === 'auto') return `Terminé tout seul, ${when(d.at)}`;
+  if (!d.by) return '';
+  const who = d.by === S.me ? 'toi' : esc(member(d.by).name);
+  if (d.status === 'lance') return `Lancé par ${who}, ${when(d.at)}. Fini vers ${fmtT(d.at + WASH)}`;
+  return `${DISH_LAST[d.act] || 'Mis à jour par'} ${who}, ${when(d.at)}`;
+}
 // Qui est censé agir maintenant, selon l'état et les rôles attitrés
 // Celui qui lance : son propre rôle, sinon celui qui remplit
 const launcher = d => d.roleLaunch || d.roleFill;
 function dishDuty(d) {
   if (d.status === 'remplir') return { who: d.roleFill, verb: 'remplir' };
-  if (d.status === 'plein') return { who: launcher(d), verb: 'lancer' };
   if (d.status === 'propre') return { who: d.roleEmpty, verb: 'vider' };
   return null;
 }
@@ -594,7 +631,7 @@ function viewVaisselle() {
   const { arr } = dishStats();
   const duty = dutyText(d);
   const max = Math.max(1, ...arr.map(a => a.rempli + a.lance + a.vide));
-  const order = ['remplir', 'plein', 'lance', 'propre'];
+  const order = ['remplir', 'lance', 'propre'];
   const pl = (n, w) => `${n} ${w}${n > 1 ? 's' : ''}`;
   const ic = { remplir: '<path d="M5 9h14l-1.5 10h-11L5 9Z"/><path d="M12 4v7M9 8l3 3 3-3"/>', plein: '<path d="M5 9h14l-1.5 10h-11L5 9Z"/><path d="M8 9V5.5M11 9V4.5M14 9V5M17 9V6"/>', lance: '<path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3"/><path d="M18 3v4h-4M6 21v-4h4"/>', propre: '<path d="M12 3l1.8 4.6L18.5 9l-4.7 1.4L12 15l-1.8-4.6L5.5 9l4.7-1.4L12 3Z"/><path d="M18 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2Z"/>' };
   const hist = [...S.dishlog].sort((a, b) => b.at - a.at).slice(0, 8);
@@ -602,11 +639,11 @@ function viewVaisselle() {
     <section class="block">
       <div class="cycle" role="list">${order.map(k => `<div role="listitem" class="${d.status === k ? 'on' : ''}"><svg viewBox="0 0 24 24">${ic[k]}</svg>${DISH[k].label}</div>`).join('')}</div>
       <p class="dishstate">${DISH[d.status].state}</p>
-      <p class="muted" style="margin:0">${d.by ? `Mis à jour par ${esc(nameOf(d.by))}, ${when(d.at)}` : 'Pas encore utilisé'}</p>
+      <p class="muted" style="margin:0">${dishLine(d) || 'Pas encore utilisé'}</p>
       ${duty ? `<div class="turn">${av(dishDuty(d).who, 'sm')}<span class="grow">${duty}</span>
         ${iAmParent() && dishDuty(d).who !== S.me ? `<button class="small" data-act="nudge-dish">Relancer</button>` : ''}</div>` : ''}
-      <div style="margin-top:16px"><button class="btn" data-act="dish-next">${DISH[d.status].action}</button>
-        ${DISH[d.status].alt ? `<button class="btn ghost" data-act="dish-alt">${DISH[d.status].alt.action}</button>` : ''}</div>
+      <div class="dish-actions">${DISH[d.status].actions.map(([a, label], i, all) =>
+        `<button class="btn ${all.length > 1 && i === 0 ? 'ghost' : ''}" data-act="dish" data-a="${a}">${label}</button>`).join('')}</div>
       <button class="link" data-act="dish-fix">Corriger l'état</button>
     </section>
     <section class="block">
@@ -866,8 +903,9 @@ function settingsSheet() {
 }
 
 /* ---------- lave-vaisselle : passage d'un état à l'autre ---------- */
-async function dishGo(next) {
+async function dishGo(act) {
   const d = dishDoc(), now = Date.now();
+  if (!DISH[d.status].actions.some(([a]) => a === act)) return; // bouton périmé (état changé entre-temps)
   const helped = role => role && role !== S.me; // quelqu'un d'autre que le responsable l'a fait
   // Sans rôle attribué : tout le monde est prévenu. Sinon seulement les responsables (sauf moi).
   const notifyRoles = (ids, msg) => {
@@ -876,22 +914,25 @@ async function dishGo(next) {
     const to = [...new Set(set.filter(x => x !== S.me))];
     if (to.length) notify({ ...msg, to });
   };
-  await store.setDoc('vaisselle', { status: next, by: S.me, at: now });
-  if (next === 'plein') {
+  const next = { fill: 'remplir', launch: 'lance', done: 'propre', empty: 'remplir' }[act];
+  await store.setDoc('vaisselle', { status: next, act, by: S.me, at: now });
+  if (act === 'fill') {
+    // peut se faire plusieurs fois avant de lancer : pas de notification
     await store.add('dishlog', { type: 'rempli', user: S.me, at: now });
-    toast(helped(d.roleFill) ? "Noté, merci d'avoir dépanné" : 'Noté : il est plein');
-    notifyRoles([launcher(d)], { title: 'Lave-vaisselle plein', body: 'Il faut le lancer.', tag: 'dish' });
+    toast(helped(d.roleFill) ? "Rempli, merci d'avoir dépanné" : 'Noté, merci');
   }
-  if (next === 'lance') {
+  if (act === 'launch') {
     await store.add('dishlog', { type: 'lance', user: S.me, at: now });
-    toast(helped(launcher(d)) ? "Lancé, merci d'avoir dépanné" : 'Lave-vaisselle lancé');
-    notify({ title: 'Lave-vaisselle lancé', body: `Par ${meM().name}. On n'y met plus rien pour l'instant.`, tag: 'dish' });
+    toast(helped(launcher(d)) ? "Lancé, merci d'avoir dépanné" : `Lancé, fini vers ${fmtT(now + WASH)}`);
+    scheduleDishEnd(d, now + WASH); // celui qui vide est prévenu à la fin du programme
   }
-  if (next === 'propre') {
+  if (act === 'done') {
+    unschedulePush('dish'); // fini plus tôt : on prévient tout de suite
     toast('Noté : il est propre');
     notifyRoles([d.roleEmpty], { title: 'Lave-vaisselle propre', body: d.roleEmpty ? 'Tu peux le vider.' : 'Il faut le vider.', tag: 'dish' });
   }
-  if (next === 'remplir') {
+  if (act === 'empty') {
+    unschedulePush('dish');
     await store.add('dishlog', { type: 'vide', user: S.me, at: now });
     toast(helped(d.roleEmpty) ? "Vidé, merci d'avoir dépanné" : 'Merci, il est vidé');
     // prévient celui qui remplit, et celui qui devait vider s'il a été dépanné
@@ -1102,8 +1143,7 @@ const ACTIONS = {
     await store.remove('bookings', b.id); toast('Créneau annulé');
     notify({ title: `${ROOMS[b.room].name} : créneau libéré`, body: `${meM().name} a annulé ${dayName(dayStart(b.start))} ${fmtT(b.start)}–${fmtT(b.end)}`, tag: 'room-' + b.room });
   },
-  'dish-next': () => dishGo(DISH[dishDoc().status].next),
-  'dish-alt': () => { const a = DISH[dishDoc().status].alt; if (a) dishGo(a.next); },
+  dish: d => dishGo(d.a),
   'dish-role': d => {
     const R = {
       fill: ['roleFill', 'Qui remplit ?', 'Personne'],
@@ -1118,7 +1158,13 @@ const ACTIONS = {
   'dish-role-set': async d => { await store.setDoc('vaisselle', { [d.k]: d.id || null }); closeSheet(); toast('Rôle enregistré'); },
   'dish-fix': () => openSheet(`<h2>Corriger l'état</h2><p class="lead">Sans rien ajouter à l'historique.</p>
     ${Object.entries(DISH).map(([k, v]) => `<button class="btn ghost" data-act="dish-set" data-s="${k}">${v.state}</button>`).join('')}`),
-  'dish-set': async d => { await store.setDoc('vaisselle', { status: d.s, by: S.me, at: Date.now() }); closeSheet(); },
+  'dish-set': async d => {
+    const now = Date.now();
+    await store.setDoc('vaisselle', { status: d.s, act: null, by: S.me, at: now });
+    unschedulePush('dish');
+    if (d.s === 'lance') scheduleDishEnd(dishDoc(), now + WASH);
+    closeSheet();
+  },
   'task-filter': d => { S.taskFilter = d.f; render(); },
   'goto-free': () => { S.taskFilter = 'libres'; location.hash = 'taches'; },
   'task-new': () => taskSheet(null),
